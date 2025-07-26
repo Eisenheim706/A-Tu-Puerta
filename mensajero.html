@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel de Mensajeros - A TU PUERTA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.7);
+    }
+    
+    .modal-content {
+      background-color: #fefefe;
+      margin: 10% auto;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 600px;
+      width: 80%;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .close:hover {
+      color: black;
+    }
+    
+    .pedido-card {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: var(--sombra);
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+    
+    .pedido-card:hover {
+      transform: translateY(-5px);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="contenedor">
+      <img src="img/icono_logo.png" alt="Logo A TU PUERTA" style="height: 60px; margin-bottom: 15px;">
+      <h1>A TU PUERTA</h1>
+      <p>Panel de Mensajeros</p>
+    </div>
+  </header>
+
+  <div class="contenedor">
+    <div id="login-container" class="login-container">
+      <h2>Iniciar sesión</h2>
+      <div class="form-group">
+        <label for="telefono">Número de teléfono</label>
+        <input type="tel" id="telefono" placeholder="Ej: 5355551234">
+      </div>
+      <div class="form-group">
+        <label for="codigo">Código de verificación</label>
+        <input type="text" id="codigo" placeholder="Código recibido">
+      </div>
+      <button id="btn-solicitar-codigo" class="btn btn-secondary">Solicitar código</button>
+      <button id="btn-login" class="btn">Iniciar sesión</button>
+      <div id="login-error" style="color: red; margin-top: 15px; display: none;"></div>
+    </div>
+
+    <div id="panel-mensajero" style="display: none;">
+      <h2>Pedidos disponibles</h2>
+      <div id="map" style="height: 400px; border-radius: 15px; margin-bottom: 25px; box-shadow: var(--sombra);"></div>
+      <div id="pedidos-disponibles">
+        <div class="cargando">
+          <div class="spinner"></div>
+          <p>Cargando pedidos disponibles...</p>
+        </div>
+      </div>
+
+      <div id="seguimiento-container" style="display: none;">
+        <h2>Seguimiento de pedido: <span id="pedido-id"></span></h2>
+        <div id="map-seguimiento" style="height: 400px; border-radius: 15px; margin-bottom: 25px; box-shadow: var(--sombra);"></div>
+        <div class="pedido-info">
+          <p><strong>Ubicación destino:</strong> <span id="ubicacion-destino"></span></p>
+          <p><strong>Costo mensajería:</strong> <span id="costo-mensajeria"></span> CUP</p>
+        </div>
+        <button id="btn-iniciar-entrega" class="btn">Iniciar entrega</button>
+        <button id="btn-finalizar-entrega" class="btn" style="display: none;">Finalizar entrega</button>
+        
+        <div class="logs-container">
+          <h3>Registro de actividad</h3>
+          <div id="logs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="contenedor">
+      <p>© 2025 A TU PUERTA - Todos los derechos reservados</p>
+    </div>
+  </footer>
+
+  <!-- Modal de detalles del pedido -->
+  <div id="modal-detalles" class="modal" style="display: none;">
+    <div class="modal-content">
+      <span class="close" onclick="document.getElementById('modal-detalles').style.display = 'none'">&times;</span>
+      <h2>Detalles del Pedido</h2>
+      <div id="detalles-pedido"></div>
+      <button onclick="aceptarPedido()" class="btn">Aceptar Pedido</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script>
+    // Configuración ACTUALIZADA
+    const config = {
+      backendUrl: "https://backend-service-6ang.onrender.com/api",
+      socketServer: "https://websocket-service-i32d.onrender.com",
+      puntoVenta: { lat: 22.401355, lng: -79.970718 }
+    };
+
+    // Variables globales
+    let map = null;
+    let mapSeguimiento = null;
+    let pedidoActivo = null;
+    let pedidoSeleccionado = null; // Para el modal
+    let socket = null;
+    let mensajeroMarker = null;
+    let trackingInterval = null;
+    let telefonoMensajero = null;
+    let markers = [];
+
+    // Función para agregar logs
+    function addLog(message, type = 'info') {
+      const logElement = document.getElementById('logs');
+      if (!logElement) return;
+      
+      const logEntry = document.createElement('div');
+      logEntry.className = `log-entry log-${type}`;
+      logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logElement.appendChild(logEntry);
+      
+      while (logElement.children.length > 50) {
+        logElement.removeChild(logElement.firstChild);
+      }
+      
+      logElement.scrollTop = logElement.scrollHeight;
+    }
+
+    // Función mejorada para manejar errores de fetch
+    async function handleFetchResponse(response) {
+      if (!response.ok) {
+        // Intentar obtener el mensaje de error
+        let errorMsg = `Error ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch {
+          try {
+            errorMsg = await response.text();
+          } catch {
+            // Mantener el mensaje predeterminado
+          }
+        }
+        throw new Error(errorMsg);
+      }
+      return response.json();
+    }
+
+    // Inicializar mapa principal
+    function initMap() {
+      if (map) map.remove();
+      map = L.map('map').setView([config.puntoVenta.lat, config.puntoVenta.lng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+
+      L.marker([config.puntoVenta.lat, config.puntoVenta.lng], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(map).bindPopup('Punto de venta');
+    }
+
+    // Inicializar mapa de seguimiento
+    function initSeguimientoMap() {
+      if (!pedidoActivo) return;
+      
+      if (mapSeguimiento) mapSeguimiento.remove();
+      mapSeguimiento = L.map('map-seguimiento').setView([
+        pedidoActivo.ubicacionEntrega.lat, 
+        pedidoActivo.ubicacionEntrega.lng
+      ], 15);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapSeguimiento);
+      
+      L.marker([
+        pedidoActivo.ubicacionEntrega.lat,
+        pedidoActivo.ubicacionEntrega.lng
+      ], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(mapSeguimiento).bindPopup('Destino de entrega');
+    }
+
+    // Actualizar mapa de seguimiento
+    function actualizarMapaSeguimiento(lat, lng) {
+      if (!mapSeguimiento) return;
+      
+      if (mensajeroMarker) {
+        mensajeroMarker.setLatLng([lat, lng]);
+      } else {
+        mensajeroMarker = L.marker([lat, lng], {
+          icon: L.icon({
+            iconUrl: 'img/icono_mensajero.png',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32]
+          })
+        }).addTo(mapSeguimiento).bindPopup('Mensajero');
+      }
+      
+      mapSeguimiento.setView([lat, lng], 15);
+    }
+
+    // Obtener pedidos disponibles (CON MANEJO DE ERRORES MEJORADO)
+    async function obtenerPedidosDisponibles() {
+      try {
+        const response = await fetch(`${config.backendUrl}/pedidos/disponibles`);
+        return await handleFetchResponse(response);
+      } catch (error) {
+        addLog(`Error obteniendo pedidos: ${error.message}`, 'error');
+        return [];
+      }
+    }
+
+    // Mostrar pedidos disponibles
+    async function mostrarPedidosDisponibles() {
+      const contenedor = document.getElementById('pedidos-disponibles');
+      contenedor.innerHTML = '<div class="cargando"><div class="spinner"></div><p>Cargando pedidos...</p></div>';
+      
+      try {
+        const pedidos = await obtenerPedidosDisponibles();
+        
+        if (pedidos.length === 0) {
+          contenedor.innerHTML = '<p>No hay pedidos disponibles</p>';
+          return;
+        }
+        
+        contenedor.innerHTML = '';
+        markers.forEach(marker => map.removeLayer(marker));
+        markers = [];
+        
+        pedidos.forEach(pedido => {
+          const card = document.createElement('div');
+          card.className = 'pedido-card';
+          
+          const costo = pedido.precioDelivery || 'Negociar';
+          
+          card.innerHTML = `
+            <h3>Pedido #${pedido.id.slice(-6)}</h3>
+            <p><strong>Ubicación:</strong> ${pedido.ubicacionEntrega.lat.toFixed(6)}, ${pedido.ubicacionEntrega.lng.toFixed(6)}</p>
+            <p><strong>Costo:</strong> ${costo} CUP</p>
+            <p><strong>Distancia:</strong> ${pedido.distanciaCarreteraKm || '?'} km</p>
+          `;
+          
+          card.addEventListener('click', () => {
+            seleccionarPedido(pedido);
+          });
+          
+          contenedor.appendChild(card);
+          
+          const marker = L.marker([
+            pedido.ubicacionEntrega.lat,
+            pedido.ubicacionEntrega.lng
+          ], {
+            icon: L.icon({
+              iconUrl: 'img/icono_logo.png',
+              iconSize: [24, 24],
+              iconAnchor: [12, 24]
+            })
+          }).addTo(map).bindPopup(`Pedido #${pedido.id.slice(-6)}`);
+          markers.push(marker);
+        });
+        
+        addLog('Pedidos cargados correctamente', 'success');
+      } catch (error) {
+        addLog(`Error: ${error.message}`, 'error');
+        contenedor.innerHTML = `<p class="error">Error cargando pedidos: ${error.message}</p>`;
+      }
+    }
+
+    // Función para mostrar detalles del pedido en modal
+    async function mostrarDetallesPedido(pedido) {
+      const modal = document.getElementById('modal-detalles');
+      const detalles = document.getElementById('detalles-pedido');
+      
+      detalles.innerHTML = `
+        <h3>Pedido #${pedido.id.slice(-6)}</h3>
+        <p><strong>Ubicación entrega:</strong> ${pedido.ubicacionEntrega.lat.toFixed(6)}, ${pedido.ubicacionEntrega.lng.toFixed(6)}</p>
+        <p><strong>Costo:</strong> ${pedido.precioDelivery || 'Negociar'} CUP</p>
+        <p><strong>Distancia:</strong> ${pedido.distanciaCarreteraKm || '?'} km</p>
+        <h4>Productos:</h4>
+        <ul>
+          ${pedido.productos.map(p => `<li>${p.nombre} x ${p.cantidad}</li>`).join('')}
+        </ul>
+      `;
+      
+      modal.style.display = 'block';
+      
+      // Guardar pedido seleccionado
+      pedidoSeleccionado = pedido;
+    }
+
+    // Seleccionar pedido (ahora muestra el modal)
+    async function seleccionarPedido(pedido) {
+      mostrarDetallesPedido(pedido);
+    }
+
+    // Función para aceptar pedido
+    async function aceptarPedido() {
+      if (!pedidoSeleccionado) return;
+      
+      try {
+        const response = await fetch(`${config.backendUrl}/pedidos/asignar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pedidoId: pedidoSeleccionado.id,
+            mensajeroId: telefonoMensajero
+          })
+        });
+        
+        await handleFetchResponse(response);
+        
+        document.getElementById('modal-detalles').style.display = 'none';
+        pedidoActivo = pedidoSeleccionado;
+        pedidoSeleccionado = null;
+        
+        // Iniciar seguimiento de ubicación
+        iniciarSeguimientoUbicacion();
+        
+        // Mostrar sección de seguimiento
+        document.getElementById('seguimiento-container').style.display = 'block';
+        document.getElementById('pedido-id').textContent = pedidoActivo.id.slice(-6);
+        document.getElementById('ubicacion-destino').textContent = 
+          `${pedidoActivo.ubicacionEntrega.lat.toFixed(6)}, ${pedidoActivo.ubicacionEntrega.lng.toFixed(6)}`;
+        document.getElementById('costo-mensajeria').textContent = 
+          pedidoActivo.precioDelivery || 'Negociar';
+        
+        initSeguimientoMap();
+        
+        addLog(`Pedido #${pedidoActivo.id.slice(-6)} aceptado`, 'success');
+      } catch (error) {
+        addLog(`Error aceptando pedido: ${error.message}`, 'error');
+        alert(`Error: ${error.message}`);
+      }
+    }
+
+    // Solicitar código (CORREGIDO)
+    async function solicitarCodigo() {
+      const telefono = document.getElementById('telefono').value;
+      const errorElement = document.getElementById('login-error');
+      errorElement.style.display = 'none';
+      
+      if (!telefono || telefono.length < 8) {
+        errorElement.textContent = 'Ingrese un número válido';
+        errorElement.style.display = 'block';
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${config.backendUrl}/mensajeros/solicitar-codigo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefono })
+        });
+        
+        const data = await handleFetchResponse(response);
+        
+        // En desarrollo, mostrar el código en un alert
+        alert(`Código enviado (SIMULADO): ${data.codigo || 'Revisa la consola del servidor'}`);
+        addLog(`Código solicitado para ${telefono}`);
+      } catch (error) {
+        errorElement.textContent = `Error: ${error.message}`;
+        errorElement.style.display = 'block';
+        addLog(`Error solicitando código: ${error.message}`, 'error');
+      }
+    }
+
+    // Iniciar sesión (CORREGIDO)
+    async function iniciarSesion() {
+      const telefono = document.getElementById('telefono').value;
+      const codigo = document.getElementById('codigo').value;
+      const errorElement = document.getElementById('login-error');
+      errorElement.style.display = 'none';
+      
+      if (!telefono || !codigo) {
+        errorElement.textContent = 'Complete todos los campos';
+        errorElement.style.display = 'block';
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${config.backendUrl}/mensajeros/verificar-codigo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefono, codigo })
+        });
+        
+        const data = await handleFetchResponse(response);
+        telefonoMensajero = telefono;
+        
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('panel-mensajero').style.display = 'block';
+        
+        initMap();
+        mostrarPedidosDisponibles();
+        addLog(`Sesión iniciada: ${telefono}`, 'success');
+      } catch (error) {
+        errorElement.textContent = `Error: ${error.message}`;
+        errorElement.style.display = 'block';
+        addLog(`Error iniciando sesión: ${error.message}`, 'error');
+      }
+    }
+
+    // Iniciar seguimiento de ubicación (MEJORADO)
+    function iniciarSeguimientoUbicacion() {
+      if (trackingInterval) clearInterval(trackingInterval);
+      
+      trackingInterval = setInterval(async () => {
+        if (!navigator.geolocation) return;
+        
+        navigator.geolocation.getCurrentPosition(
+          async position => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            actualizarMapaSeguimiento(lat, lng);
+            
+            try {
+              // Verificar ubicación con el servidor
+              const response = await fetch(`${config.backendUrl}/pedidos/verificar-ubicacion`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  pedidoId: pedidoActivo.id,
+                  lat,
+                  lng
+                })
+              });
+              
+              const data = await response.json();
+              
+              if (data.estado === 'en camino') {
+                addLog('¡Pedido en camino! Dirigiéndose al destino', 'success');
+                document.getElementById('btn-iniciar-entrega').style.display = 'none';
+              } 
+              else if (data.estado === 'entregado') {
+                clearInterval(trackingInterval);
+                addLog('¡Pedido entregado con éxito!', 'success');
+                document.getElementById('btn-finalizar-entrega').style.display = 'block';
+              }
+              
+            } catch (error) {
+              addLog(`Error verificando ubicación: ${error.message}`, 'error');
+            }
+            
+            if (socket && socket.connected) {
+              socket.emit('actualizar_ubicacion', {
+                pedidoId: pedidoActivo.id,
+                lat,
+                lng
+              });
+            }
+          },
+          error => {
+            addLog(`Error de geolocalización: ${error.message}`, 'error');
+          },
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
+      }, 10000); // Verificar cada 10 segundos
+    }
+
+    // Inicializar WebSocket
+    function initSocket() {
+      socket = io(config.socketServer, {
+        transports: ['websocket'],
+        reconnection: true
+      });
+
+      socket.on('connect', () => {
+        addLog('Conectado al servidor de seguimiento', 'success');
+      });
+
+      socket.on('disconnect', () => {
+        addLog('Desconectado del servidor', 'error');
+      });
+    }
+
+    // Event listeners
+    document.getElementById('btn-solicitar-codigo').addEventListener('click', solicitarCodigo);
+    document.getElementById('btn-login').addEventListener('click', iniciarSesion);
+    document.getElementById('btn-iniciar-entrega').addEventListener('click', function() {
+      iniciarSeguimientoUbicacion();
+      this.style.display = 'none';
+      addLog('Entrega iniciada', 'success');
+    });
+    
+    document.getElementById('btn-finalizar-entrega').addEventListener('click', async function() {
+      if (trackingInterval) clearInterval(trackingInterval);
+      
+      try {
+        const response = await fetch(`${config.backendUrl}/pedidos/entregado`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pedidoId: pedidoActivo.id })
+        });
+        
+        await handleFetchResponse(response);
+        
+        addLog(`Pedido #${pedidoActivo.id.slice(-6)} entregado`, 'success');
+        alert('¡Entrega finalizada con éxito!');
+        
+        document.getElementById('seguimiento-container').style.display = 'none';
+        pedidoActivo = null;
+        mensajeroMarker = null;
+        mostrarPedidosDisponibles();
+      } catch (error) {
+        addLog(`Error finalizando entrega: ${error.message}`, 'error');
+        alert(`Error: ${error.message}`);
+      }
+    });
+
+    // Inicializar
+    window.onload = function() {
+      initSocket();
+      addLog('Sistema iniciado', 'info');
+    };
+  </script>
+</body>
+</html>
