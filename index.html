@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="theme-color" content="#fcbf49" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>A TU PUERTA - Sueña desde casa</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
+  <script src="https://unpkg.com/@mapbox/polyline@1.1.1"></script>
+</head>
+<body>
+
+<header class="hero">
+  <a href="mensajeros.html" id="btn-acceso-mensajeros" class="btn btn-mensajeros">
+    Acceso Mensajeros
+  </a>
+  <div class="contenedor">
+    <h1>A TU PUERTA</h1>
+    <p style="font-size: 1.5rem; margin-bottom: 30px; max-width: 700px; margin: 0 auto 30px;">Sueña desde casa</p>
+    <a href="#menu" class="btn btn-acento">Ver productos disponibles</a>
+  </div>
+</header>
+
+<section id="menu">
+  <div class="contenedor">
+    <h2 class="titulo-seccion">Productos disponibles</h2>
+    
+    <nav id="menu-categorias" class="menu-categorias">
+      <a href="#categoria-Alimentos" class="categoria-btn active">🍽️ Alimentos</a>
+      <a href="#categoria-Aseo" class="categoria-btn">🧴 Aseo</a>
+      <a href="#categoria-Bebidas" class="categoria-btn">🥤 Bebidas</a>
+      <a href="#categoria-Construccion" class="categoria-btn">🏗️ Materiales de Construcción</a>
+      <a href="#categoria-Otros" class="categoria-btn">📦 Otros</a>
+    </nav>
+    
+    <div id="contenedor-productos">
+      <div class="cargando">
+        <div class="spinner"></div>
+        <p>Cargando productos desde productos.csv...</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="delivery">
+  <div class="contenedor">
+    <h2 class="titulo-seccion">🚚 Servicio a domicilio</h2>
+    
+    <div id="map"></div>
+    
+    <div class="info-entrega">
+      <p>📍 Haz clic en el mapa para marcar tu ubicación. <span id="geo-msg" style="font-style:italic; color:#666;"></span></p>
+      <div id="ruta-mensaje" class="ruta-mensaje" style="display: none;">
+        <span>📡</span>
+        <span>Calculando ruta por carretera...</span>
+      </div>
+      <div id="negociacion-mensaje" class="negociacion-mensaje" style="display: none;">
+        <span>⚠️</span>
+        <span>El costo de mensajería es más alto de lo previsto por la empresa. Por favor <a href="https://wa.me/5354776437" target="_blank">contacte al administrador</a> para negociar el precio.</span>
+      </div>
+      <p><strong>Distancia por carretera:</strong> <span id="distancia">0</span> km</p>
+      <p><strong>Entrega:</strong> <span id="precio">0</span> CUP</p>
+      <p><strong>Total con envío:</strong> <span id="total-con-envio">0</span> CUP</p>
+    </div>
+  </div>
+</section>
+
+<section id="resumen-pedido" style="display: none;">
+  <div class="contenedor">
+    <h2 class="titulo-seccion">🧾 Resumen del pedido</h2>
+    
+    <div id="detalle-resumen">
+      <ul id="resumen-lista"></ul>
+      
+      <div class="resumen-totales">
+        <p><strong>Productos:</strong> <span id="resumen-total-productos">0</span> CUP</p>
+        <p><strong>Delivery:</strong> <span id="resumen-delivery">0</span> CUP</p>
+        <p><strong>Total con envío:</strong> <span id="resumen-total-final">0</span> CUP</p>
+      </div>
+
+      <button id="confirmar-resumen" class="btn btn-acento">
+        Confirmar pedido por WhatsApp
+      </button>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="contenedor">
+    <p>© 2025 A TU PUERTA - Todos los derechos reservados</p>
+    <p style="margin-top: 15px;">Desarrollado con ❤️ para emprendedores locales</p>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script>
+  // Configuración de la aplicación
+  const config = {
+    puntoVenta: {lat: 22.401355, lng: -79.970718},
+    precioBasePorKm: 150,
+    precioMedioPorKm: 200,
+    precioMinimo: 300,
+    maxIntentos: 3,
+    maxDistancia: 50,
+    umbralNegociacion: 15000,
+    routeCache: {},
+    apiTimeout: 10000,
+    backendUrl: "https://backend-service-6ang.onrender.com/api",
+    socketServer: "https://websocket-service-i32d.onrender.com",
+    routingService: "ors",
+    corsProxy: "https://corsproxy.io/?"
+  };
+  
+  // Variables globales
+  let carrito = [];
+  let destinoCliente = null;
+  let distanciaCarreteraKm = 0;
+  let precioDelivery = 0;
+  let calculandoRuta = false;
+  let map = null;
+  let marker = null;
+  let routeLayer = null;
+  let socket = null;
+  let db = null;
+  let pedidoActivo = null;
+
+  // Elementos del DOM
+  const geoMsg = document.getElementById('geo-msg');
+  const rutaMensaje = document.getElementById('ruta-mensaje');
+  const negociacionMensaje = document.getElementById('negociacion-mensaje');
+
+  // Función para escapar HTML
+  function escapeHTML(str) {
+    return str.replace(/[&<>"']/g, 
+      tag => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[tag] || tag));
+  }
+
+  // Función para actualizar costos de envío
+  function actualizarCostosEnvio() {
+    const materialesConstruccion = carrito.filter(item => item.categoria === 'Construccion');
+    const otrosProductos = carrito.filter(item => item.categoria !== 'Construccion');
+    
+    const totalMateriales = materialesConstruccion.reduce((t, i) => t + i.precio * i.cantidad, 0);
+    const totalOtros = otrosProductos.reduce((t, i) => t + i.precio * i.cantidad, 0);
+    
+    let costoBase = 0;
+    
+    if (distanciaCarreteraKm <= 5) {
+      costoBase = distanciaCarreteraKm * config.precioBasePorKm;
+      if (costoBase < config.precioMinimo) costoBase = config.precioMinimo;
+    } 
+    else if (distanciaCarreteraKm > 5 && distanciaCarreteraKm <= 30) {
+      costoBase = distanciaCarreteraKm * config.precioMedioPorKm;
+    } 
+    else {
+      costoBase = distanciaCarreteraKm * config.precioBasePorKm;
+    }
+    
+    let porcentajeAdicional = 0;
+    
+    if (totalOtros > 0) {
+      if (totalOtros <= 10000) {
+        porcentajeAdicional = totalOtros * 0.03;
+      } 
+      else if (totalOtros <= 20000) {
+        porcentajeAdicional = totalOtros * 0.04;
+      } 
+      else {
+        porcentajeAdicional = totalOtros * 0.05;
+      }
+    }
+    
+    precioDelivery = Math.round(costoBase + porcentajeAdicional);
+    
+    if (materialesConstruccion.length > 0) {
+      const descuento = otrosProductos.length === 0 ? 1 : 0.5;
+      precioDelivery = Math.round(precioDelivery * (1 - descuento));
+    }
+    
+    const total = totalMateriales + totalOtros + precioDelivery;
+    const mostrarNegociacion = precioDelivery > config.umbralNegociacion;
+    
+    document.getElementById('distancia').textContent = distanciaCarreteraKm;
+    document.getElementById('precio').textContent = mostrarNegociacion ? 'Negociar' : precioDelivery;
+    document.getElementById('total-con-envio').textContent = mostrarNegociacion ? 'Negociar' : total;
+    
+    negociacionMensaje.style.display = mostrarNegociacion ? 'flex' : 'none';
+    
+    if (materialesConstruccion.length > 0) {
+      const descuentoMsg = otrosProductos.length === 0 ? 
+        "Descuento del 100% aplicado por materiales de construcción" :
+        "Descuento del 50% aplicado por materiales de construcción";
+      
+      rutaMensaje.innerHTML = `<span>🎁</span><span>${descuentoMsg}</span>`;
+      rutaMensaje.style.background = '#e8f5e9';
+      rutaMensaje.style.display = 'flex';
+    }
+    
+    if (document.getElementById('resumen-delivery')) {
+      document.getElementById('resumen-delivery').textContent = mostrarNegociacion ? 'Negociar' : precioDelivery;
+      document.getElementById('resumen-total-final').textContent = mostrarNegociacion ? 'Negociar' : total;
+    }
+    
+    if (distanciaCarreteraKm > config.maxDistancia) {
+      rutaMensaje.innerHTML = `<span>⚠️</span><span>Distancia (${distanciaCarreteraKm} km) supera el límite (${config.maxDistancia} km)</span>`;
+      rutaMensaje.style.background = '#ffebee';
+    }
+  }
+
+  // Inicializar el mapa
+  function initMap() {
+    map = L.map('map').setView([config.puntoVenta.lat, config.puntoVenta.lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    marker = null;
+    routeLayer = null;
+    
+    const tiendaIcon = L.divIcon({
+      html: `<div style="background-color: #d62828; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);">
+              <div style="background-color: white; width: 12px; height: 12px; border-radius: 50%;"></div>
+            </div>`,
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 32]
+    });
+    
+    L.marker([config.puntoVenta.lat, config.puntoVenta.lng], {
+      icon: tiendaIcon
+    }).addTo(map).bindPopup('Nuestro punto de venta');
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          const userPos = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          map.setView([userPos.lat, userPos.lng], 15);
+          if (marker) map.removeLayer(marker);
+          marker = L.marker([userPos.lat, userPos.lng]).addTo(map);
+          destinoCliente = userPos;
+          calcularRutaCarretera(config.puntoVenta, destinoCliente);
+          geoMsg.textContent = 'Ubicación detectada automáticamente.';
+          
+          const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${userPos.lat}&lon=${userPos.lng}`;
+          fetch(url)
+            .then(res => res.json())
+            .then(data => {
+              if (data.display_name) {
+                geoMsg.textContent = `Ubicación: ${data.display_name}`;
+              }
+            });
+        },
+        error => {
+          console.error('Error en geolocalización:', error);
+          geoMsg.textContent = 'No se pudo obtener tu ubicación. Haz clic en el mapa.';
+        }
+      );
+    } else {
+      geoMsg.textContent = 'Tu navegador no soporta geolocalización. Haz clic en el mapa.';
+    }
+
+    map.on('click', async e => {
+      if (marker) map.removeLayer(marker);
+      marker = L.marker(e.latlng).addTo(map);
+      destinoCliente = { lat: e.latlng.lat, lng: e.latlng.lng };
+      
+      geoMsg.textContent = 'Ubicación seleccionada manualmente.';
+      
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${e.latlng.lat}&lon=${e.latlng.lng}`;
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          if (data.display_name) {
+            geoMsg.textContent = `Ubicación: ${data.display_name}`;
+          }
+        });
+      
+      await calcularRutaCarretera(config.puntoVenta, destinoCliente);
+      actualizarResumenPedido();
+    });
+  }
+
+  // Calcular ruta por carretera
+  async function calcularRutaCarretera(origen, destino) {
+    if (!destino) {
+      rutaMensaje.innerHTML = '<span>⚠️</span><span>Selecciona una ubicación en el mapa</span>';
+      rutaMensaje.style.display = 'flex';
+      return;
+    }
+    
+    if (calculandoRuta) return;
+    calculandoRuta = true;
+    
+    rutaMensaje.style.display = 'flex';
+    rutaMensaje.innerHTML = '<span>🔄</span><span>Calculando la mejor ruta por carretera...</span>';
+    
+    const cacheKey = `${origen.lat.toFixed(6)},${origen.lng.toFixed(6)}-${destino.lat.toFixed(6)},${destino.lng.toFixed(6)}`;
+    
+    if (config.routeCache[cacheKey]) {
+      distanciaCarreteraKm = config.routeCache[cacheKey];
+      actualizarCostosEnvio();
+      dibujarRutaEnMapa(null);
+      rutaMensaje.innerHTML = `<span>✅</span><span>Ruta calculada: ${distanciaCarreteraKm} km (desde caché)</span>`;
+      calculandoRuta = false;
+      return;
+    }
+    
+    let intentos = 0;
+    let exito = false;
+    
+    while (intentos < config.maxIntentos && !exito) {
+      try {
+        const response = await fetch(`${config.backendUrl}/ruta`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            origen: { lat: origen.lat, lng: origen.lng },
+            destino: { lat: destino.lat, lng: destino.lng }
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Error HTTP: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const distanciaMetros = data.distancia;
+        distanciaCarreteraKm = (distanciaMetros / 1000).toFixed(2);
+        config.routeCache[cacheKey] = distanciaCarreteraKm;
+        
+        let coords = null;
+        if (data.geometria) {
+          coords = polyline.decode(data.geometria);
+        }
+        
+        dibujarRutaEnMapa(coords);
+        actualizarCostosEnvio();
+        
+        rutaMensaje.innerHTML = `<span>✅</span><span>Ruta calculada: ${distanciaCarreteraKm} km</span>`;
+        exito = true;
+        
+      } catch (error) {
+        intentos++;
+        console.error(`Intento ${intentos} fallido:`, error);
+        
+        if (intentos < config.maxIntentos) {
+          const tiempoEspera = Math.min(intentos * 1000, 3000);
+          rutaMensaje.innerHTML = `<span>⚠️</span><span>Reintentando (${intentos}/${config.maxIntentos}) - ${error.message}</span>`;
+          await new Promise(resolve => setTimeout(resolve, tiempoEspera));
+        } else {
+          rutaMensaje.innerHTML = `<span>❌</span><span>Error: ${error.message || 'Servicio no disponible'}</span>`;
+          usarDistanciaAproximada(origen, destino);
+          exito = true;
+        }
+      }
+    }
+    
+    calculandoRuta = false;
+  }
+
+  // Función para dibujar la ruta en el mapa
+  function dibujarRutaEnMapa(coordinates) {
+    if (routeLayer) {
+      map.removeLayer(routeLayer);
+      routeLayer = null;
+    }
+    
+    if (coordinates && Array.isArray(coordinates)) {
+      try {
+        const latLngs = coordinates.map(coord => L.latLng(coord[0], coord[1]));
+        routeLayer = L.polyline(latLngs, {
+          color: '#d62828',
+          weight: 6,
+          opacity: 0.8,
+          lineJoin: 'round'
+        }).addTo(map);
+        
+        const bounds = L.latLngBounds(latLngs);
+        map.fitBounds(bounds, { padding: [50, 50] });
+        
+      } catch (error) {
+        console.error('Error dibujando ruta:', error);
+        rutaMensaje.innerHTML = `<span>⚠️</span><span>Error dibujando ruta: ${error.message}</span>`;
+        usarDistanciaAproximada(config.puntoVenta, destinoCliente);
+      }
+    } else {
+      console.warn('Coordenadas de ruta no válidas');
+      rutaMensaje.innerHTML = `<span>⚠️</span><span>Datos de ruta incompletos, usando distancia aproximada</span>`;
+      usarDistanciaAproximada(config.puntoVenta, destinoCliente);
+    }
+  }
+
+  // Función de fallback para distancia aproximada
+  function usarDistanciaAproximada(coord1, coord2) {
+    const R = 6371;
+    const dLat = (coord2.lat - coord1.lat) * Math.PI / 180;
+    const dLon = (coord2.lng - coord1.lng) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(coord1.lat * Math.PI / 180) * Math.cos(coord2.lat * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+    
+    distanciaCarreteraKm = (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(2);
+    actualizarCostosEnvio();
+    
+    if (routeLayer) {
+      map.removeLayer(routeLayer);
+      routeLayer = null;
+    }
+    
+    routeLayer = L.polyline([
+      [coord1.lat, coord1.lng],
+      [coord2.lat, coord2.lng]
+    ], {
+      color: '#9e9e9e',
+      weight: 2,
+      dashArray: '10, 10',
+      opacity: 0.7
+    }).addTo(map);
+    
+    rutaMensaje.innerHTML = `<span>⚠️</span><span>Usando distancia aproximada: ${distanciaCarreteraKm} km</span>`;
+  }
+
+  // Función para mostrar errores de productos
+  function mostrarErrorProductos(mensaje) {
+    const contenedor = document.getElementById('contenedor-productos');
+    contenedor.innerHTML = `
+      <div class="error-container">
+        <h3 class="error-title">Error cargando productos</h3>
+        <p>${mensaje}</p>
+        <p>Por favor verifica el archivo productos.csv</p>
+      </div>
+    `;
+  }
+
+  // Cargar productos desde CSV
+  async function cargarProductosCSV() {
+    try {
+      const res = await fetch('productos.csv');
+      
+      if (!res.ok) {
+        throw new Error(`Error HTTP! estado: ${res.status}`);
+      }
+      
+      const csvText = await res.text();
+      
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(resultado) {
+          if (resultado.data && Array.isArray(resultado.data) && resultado.data.length > 0) {
+            mostrarProductosDesdeCSV(resultado.data);
+          } else {
+            throw new Error('El archivo CSV está vacío o no tiene datos válidos');
+          }
+        },
+        error: function(error) {
+          throw new Error(`Error parseando CSV: ${error.message}`);
+        }
+      });
+    } catch (err) {
+      console.error('Error cargando productos:', err);
+      mostrarErrorProductos(err.message);
+    }
+  }
+
+  // Mostrar productos en la página
+  function mostrarProductosDesdeCSV(productos) {
+    if (!Array.isArray(productos) || productos.length === 0) {
+      mostrarErrorProductos('No se encontraron productos válidos');
+      return;
+    }
+
+    const categorias = ["Alimentos", "Aseo", "Bebidas", "Construccion", "Otros"];
+    const contenedor = document.getElementById('contenedor-productos');
+    contenedor.innerHTML = '';
+    
+    try {
+      categorias.forEach(categoria => {
+        const productosCategoria = productos.filter(p => 
+          p.categoria && p.categoria.trim().toLowerCase() === categoria.toLowerCase()
+        );
+        
+        if (productosCategoria.length === 0) return;
+        
+        const categoriaHTML = `
+          <h3 id="categoria-${categoria}" style="margin: 40px 0 20px; color: var(--color-acento);">
+            ${categoria === 'Alimentos' ? '🍽️' : categoria === 'Aseo' ? '🧴' : categoria === 'Bebidas' ? '🥤' : categoria === 'Construccion' ? '🏗️' : '📦'} 
+            ${categoria}
+          </h3>
+          <div class="categoria-grid" id="grid-${categoria}"></div>
+        `;
+        
+        contenedor.innerHTML += categoriaHTML;
+      });
+      
+      productos.forEach((prod, index) => {
+        const idInput = `qty-${index}`;
+        const nombre = prod.nombre?.trim() || "Producto";
+        const precio = parseFloat(prod.precio) || 0;
+        const imagen = prod.imagen?.trim() || "default.jpg";
+        const categoria = prod.categoria?.trim() || "Otros";
+
+        let contenedorCategoria = document.getElementById(`grid-${categoria}`);
+        if (!contenedorCategoria) contenedorCategoria = document.getElementById("grid-Otros");
+        if (!contenedorCategoria) return;
+
+        const div = document.createElement("div");
+        div.className = "producto";
+        
+        const nombreSeguro = escapeHTML(nombre);
+        
+        div.innerHTML = `
+          <img src="img/${imagen}" alt="${nombreSeguro}" 
+               onerror="this.onerror=null; this.src='https://source.unsplash.com/random/300x200/?${encodeURIComponent(nombreSeguro)}';">
+          <h3>${nombreSeguro}</h3>
+          <p class="precio">${precio} CUP</p>
+          <div class="contador">
+            <input type="number" id="${idInput}" value="1" min="1">
+            <button class="btn agregar-btn" data-index="${index}" style="padding: 8px 15px;">
+              Agregar
+            </button>
+          </div>
+        `;
+        if (contenedorCategoria) {
+          contenedorCategoria.appendChild(div);
+        }
+      });
+      
+      // Agregar event listeners a los botones de agregar
+      document.querySelectorAll('.agregar-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const index = this.getAttribute('data-index');
+          const producto = productos[index];
+          if (producto) {
+            const inputId = `qty-${index}`;
+            const cantidad = parseInt(document.getElementById(inputId).value) || 1;
+            addToCart(producto.nombre, parseFloat(producto.precio), inputId, producto.categoria);
+          }
+        });
+      });
+      
+      if (productos.length === 0) {
+        contenedor.innerHTML = `
+          <div class="error-container">
+            <h3 class="error-title">No se encontraron productos</h3>
+            <p>Por favor verifica el archivo productos.csv</p>
+          </div>
+        `;
+      }
+    } catch (error) {
+      console.error('Error mostrando productos:', error);
+      mostrarErrorProductos('Error procesando los datos de productos');
+    }
+  }
+
+  // Función para agregar al carrito
+  function addToCart(nombre, precio, inputId, categoria) {
+    const cantidad = parseInt(document.getElementById(inputId).value) || 1;
+    
+    const index = carrito.findIndex(item => item.nombre === nombre);
+    
+    if (index >= 0) {
+      carrito[index].cantidad += cantidad;
+    } else {
+      carrito.push({
+        nombre,
+        precio,
+        cantidad,
+        categoria
+      });
+    }
+    
+    actualizarResumenPedido();
+    actualizarCostosEnvio();
+    
+    const btn = document.querySelector(`button[data-index="${inputId.split('-')[1]}"]`);
+    if (btn) {
+      btn.textContent = '✓ Agregado';
+      btn.style.background = '#4caf50';
+      btn.style.color = 'white';
+      setTimeout(() => {
+        btn.textContent = 'Agregar';
+        btn.style.background = '';
+        btn.style.color = '';
+      }, 2000);
+    }
+  }
+
+  // Actualizar resumen del pedido
+  function actualizarResumenPedido() {
+    const resumenLista = document.getElementById('resumen-lista');
+    const resumenSection = document.getElementById('resumen-pedido');
+    
+    if (!resumenLista || !resumenSection) return;
+    
+    const totalProductos = carrito.reduce((t, i) => t + i.precio * i.cantidad, 0);
+    const total = totalProductos + precioDelivery;
+    
+    resumenLista.innerHTML = '';
+    carrito.forEach(item => {
+      const li = document.createElement('li');
+      const nombreSeguro = escapeHTML(item.nombre);
+      
+      li.innerHTML = `
+        <span>${nombreSeguro} x ${item.cantidad}</span>
+        <span>${item.precio * item.cantidad} CUP</span>
+        <button class="eliminar-item" data-nombre="${nombreSeguro}">×</button>
+      `;
+      resumenLista.appendChild(li);
+    });
+    
+    document.getElementById('resumen-total-productos').textContent = totalProductos;
+    document.getElementById('resumen-delivery').textContent = precioDelivery > config.umbralNegociacion ? 'Negociar' : precioDelivery;
+    document.getElementById('resumen-total-final').textContent = precioDelivery > config.umbralNegociacion ? 'Negociar' : total;
+    
+    resumenSection.style.display = carrito.length > 0 ? 'block' : 'none';
+    
+    document.querySelectorAll('.eliminar-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nombre = btn.getAttribute('data-nombre');
+        carrito = carrito.filter(item => item.nombre !== nombre);
+        actualizarResumenPedido();
+        actualizarCostosEnvio();
+      });
+    });
+  }
+
+  // Inicializar IndexedDB
+  async function initDB() {
+    try {
+      db = await idb.openDB('tiendaDB', 1, {
+        upgrade(db) {
+          db.createObjectStore('pedidos', { keyPath: 'id' });
+        }
+      });
+    } catch (error) {
+      console.error('Error inicializando IndexedDB:', error);
+    }
+  }
+
+  // Guardar pedido en IndexedDB
+  async function guardarPedido(pedido) {
+    if (!db) return;
+    try {
+      await db.put('pedidos', pedido);
+    } catch (error) {
+      console.error('Error guardando pedido en IndexedDB:', error);
+    }
+  }
+
+  // Función para enviar pedido al backend
+  async function enviarPedidoAlBackend(pedido) {
+    try {
+      const response = await fetch(`${config.backendUrl}/pedidos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(pedido)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error HTTP: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Pedido guardado en backend:', data);
+    } catch (error) {
+      console.error('Error enviando pedido al backend:', error);
+    }
+  }
+
+  // Configurar eventos
+  function setupEventListeners() {
+    document.getElementById('confirmar-resumen').addEventListener('click', async () => {
+      if (carrito.length === 0) {
+        alert("Por favor, agrega productos al carrito primero.");
+        return;
+      }
+      
+      if (!destinoCliente) {
+        alert("Por favor, selecciona tu ubicación en el mapa.");
+        return;
+      }
+
+      const totalProductos = carrito.reduce((t, i) => t + i.precio * i.cantidad, 0);
+      const km = document.getElementById('distancia').textContent;
+      const precioDelivery = document.getElementById('precio').textContent;
+      const total = document.getElementById('resumen-total-final').textContent;
+
+      const pedidoId = 'pedido-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+      
+      const pedido = {
+        id: pedidoId,
+        productos: carrito,
+        ubicacionVenta: config.puntoVenta,
+        ubicacionEntrega: destinoCliente,
+        estado: "en proceso",
+        mensajeroId: null,
+        distanciaCarreteraKm: parseFloat(km),
+        precioDelivery: precioDelivery === 'Negociar' ? null : parseFloat(precioDelivery),
+        geometria_ruta: routeLayer ? L.polyline.encode(routeLayer.getLatLngs()) : null
+      };
+      
+      await guardarPedido(pedido);
+      await enviarPedidoAlBackend(pedido);
+      
+      // CONSTRUCCIÓN DEL MENSAJE CORREGIDA
+      let mensaje = `¡Hola! Quisiera confirmar este pedido:\n\n`;
+      mensaje += `*📦 DETALLE DE PRODUCTOS:*\n`;
+      carrito.forEach(p => {
+        const nombre = escapeHTML(p.nombre).replace(/\*/g, '\\*');
+        mensaje += `- ${nombre}\n`;
+        mensaje += `  Cantidad: ${p.cantidad}\n`;
+        mensaje += `  Precio unitario: ${p.precio} CUP\n`;
+        mensaje += `  Subtotal: ${p.precio * p.cantidad} CUP\n\n`;
+      });
+      
+      mensaje += `*🧾 RESUMEN DE PEDIDO:*\n`;
+      mensaje += `Productos: ${totalProductos} CUP\n`;
+      mensaje += `Mensajería (${km} km): ${precioDelivery} CUP\n`;
+      mensaje += `*TOTAL: ${total} CUP*\n\n`;
+      
+      mensaje += `📍 *UBICACIÓN DE ENTREGA:*\n`;
+      mensaje += `https://www.google.com/maps?q=${destinoCliente.lat},${destinoCliente.lng}\n\n`;
+      
+      mensaje += `🔍 *SEGUIMIENTO EN TIEMPO REAL:*\n`;
+      mensaje += `${window.location.origin}/seguimiento.html?id=${pedidoId}\n\n`;
+      
+      mensaje += `¡Gracias!`;
+
+      const telefono = "5354776437";
+      
+      // Codificación correcta del mensaje
+      const mensajeCodificado = encodeURIComponent(mensaje);
+      const enlace = `https://wa.me/${telefono}?text=${mensajeCodificado}`;
+      
+      window.open(enlace, '_blank');
+      
+      carrito = [];
+      actualizarResumenPedido();
+    });
+    
+    document.querySelectorAll('.categoria-btn').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('.categoria-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        const targetId = this.getAttribute('href');
+        document.querySelector(targetId)?.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+    
+    // Botón flotante para ir arriba
+    window.addEventListener('scroll', () => {
+      const btnArriba = document.getElementById('btn-arriba');
+      if (window.scrollY > 300) {
+        btnArriba.classList.add('visible');
+      } else {
+        btnArriba.classList.remove('visible');
+      }
+    });
+  }
+
+  // Inicializar la aplicación
+  window.onload = async function() {
+    carrito = [];
+    initMap();
+    cargarProductosCSV();
+    setupEventListeners();
+    await initDB();
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mensajero') === '1') {
+      document.getElementById('btn-acceso-mensajeros').style.display = 'block';
+    }
+  };
+</script>
+
+<button id="btn-arriba" title="Ir al menú" onclick="document.getElementById('menu').scrollIntoView({ behavior: 'smooth' })"></button>
+</body>
+</html>
