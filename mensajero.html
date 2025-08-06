@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel de Mensajeros - A TU PUERTA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="https://unpkg.com/@mapbox/polyline@1.1.1"></script>
+  
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <style>
+    :root {
+      --primary: #4361ee;
+      --primary-dark: #3a56d4;
+      --success: #06d6a0;
+      --warning: #ffd166;
+      --danger: #ef476f;
+      --dark: #1e293b;
+      --light: #f8f9fa;
+      --gray: #64748b;
+      --light-gray: #e2e8f0;
+      --sombra: 0 4px 20px rgba(0, 0, 0, 0.08);
+      --border-radius: 12px;
+      --transition: all 0.3s ease;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: #f0f2f5;
+      color: var(--dark);
+      line-height: 1.6;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    header {
+      background: linear-gradient(135deg, rgba(67, 97, 238, 0.85), rgba(58, 86, 212, 0.85)),
+                 url('img/icono_logo.png') center center no-repeat;
+      background-size: cover, 200px auto;
+      background-blend-mode: overlay;
+      color: white;
+      padding: 20px 0;
+      text-align: center;
+      position: relative;
+      height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      box-shadow: var(--sombra);
+    }
+    
+    header::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.1);
+    }
+    
+    header .contenedor {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+      position: relative;
+      z-index: 2;
+    }
+    
+    header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      font-weight: 700;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    header p {
+      font-size: 1.2rem;
+      opacity: 0.9;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    
+    .contenedor {
+      max-width: 1200px;
+      margin: 30px auto;
+      padding: 0 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ----------------- Diseño moderno de autenticación ----------------- */
+    .auth-container {
+      max-width: 500px;
+      margin: 0 auto;
+      background: white;
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      box-shadow: var(--sombra);
+      align-self: center;
+      width: 100%;
+    }
+    
+    .auth-header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      padding: 25px;
+      text-align: center;
+    }
+    
+    .auth-header h2 {
+      font-size: 1.8rem;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    
+    .auth-form {
+      padding: 30px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+      position: relative;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--dark);
+      font-size: 0.9rem;
+    }
+    
+    .input-icon {
+      position: relative;
+    }
+    
+    .input-icon i {
+      position: absolute;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--gray);
+      font-size: 1rem;
+    }
+    
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 14px 15px 14px 45px;
+      border: 1px solid var(--light-gray);
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: var(--transition);
+      background: #fafafa;
+    }
+    
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
+    }
+    
+    .auth-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: var(--transition);
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.25);
+    }
+    
+    .auth-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(67, 97, 238, 0.35);
+    }
+    
+    .auth-btn.secondary {
+      background: white;
+      color: var(--primary);
+      border: 1px solid var(--light-gray);
+      box-shadow: none;
+      margin-top: 10px;
+    }
+    
+    .auth-btn.secondary:hover {
+      background: #f8f9fa;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    .auth-footer {
+      text-align: center;
+      margin-top: 20px;
+      color: var(--gray);
+      font-size: 0.9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .auth-footer a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    
+    .auth-footer a:hover {
+      text-decoration: underline;
+    }
+    
+    .divider {
+      display: flex;
+      align-items: center;
+      margin: 25px 0;
+    }
+    
+    .divider::before, .divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--light-gray);
+    }
+    
+    .divider span {
+      padding: 0 15px;
+      color: var(--gray);
+      font-size: 0.9rem;
+    }
+    
+    .social-login {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .social-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--light-gray);
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    
+    .social-btn:hover {
+      background: #f8f9fa;
+      transform: translateY(-2px);
+    }
+    
+    .social-btn i {
+      font-size: 1.2rem;
+      margin-right: 8px;
+    }
+    
+    .google-btn {
+      color: #DB4437;
+    }
+    
+    .facebook-btn {
+      color: #4267B2;
+    }
+    
+    /* ----------------- Fin del diseño de autenticación ----------------- */
+    
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.7);
+      overflow: auto;
+    }
+    
+    .modal-content {
+      background-color: #fefefe;
+      margin: 5% auto;
+      padding: 25px;
+      border-radius: var(--border-radius);
+      max-width: 600px;
+      width: 90%;
+      box-shadow: var(--sombra);
+      position: relative;
+    }
+    
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+      position: absolute;
+      top: 15px;
+      right: 15px;
+    }
+    
+    .close:hover {
+      color: black;
+    }
+    
+    .pedido-info-card {
+      background: white;
+      border-radius: var(--border-radius);
+      padding: 20px;
+      margin-top: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    /* Botones */
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .btn {
+      flex: 1;
+      min-width: 150px;
+      padding: 12px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: var(--transition);
+    }
+    
+    .btn:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(67, 97, 238, 0.3);
+    }
+    
+    .btn-secondary {
+      background: #6c757d;
+    }
+    
+    .btn:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    /* Botón flotante para ubicación manual */
+    .btn-flotante {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    
+    .btn-flotante:hover {
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    }
+
+    /* Modal para tipo de ubicación */
+    .modal-tipo-ubicacion .modal-content {
+      max-width: 400px;
+      text-align: center;
+    }
+    
+    .modal-tipo-ubicacion .btn-group {
+      justify-content: center;
+    }
+    
+    /* Modal de registro */
+    .modal-registro .modal-content {
+      max-width: 500px;
+    }
+    
+    .modal-registro h2 {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    
+    .modal-registro .form-group {
+      margin-bottom: 15px;
+    }
+
+    /* Panel de administración */
+    .admin-panel {
+      background: white;
+      border-radius: var(--border-radius);
+      padding: 25px;
+      margin-top: 30px;
+      box-shadow: var(--sombra);
+      display: none;
+    }
+    
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--light-gray);
+    }
+    
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      border-radius: var(--border-radius);
+      overflow: hidden;
+    }
+    
+    .admin-table th, .admin-table td {
+      padding: 14px 15px;
+      text-align: left;
+      border-bottom: 1px solid var(--light-gray);
+    }
+    
+    .admin-table th {
+      background: #f8fafc;
+      color: var(--gray);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    
+    .admin-table tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    
+    .admin-table tr:hover {
+      background: #f1f5f9;
+    }
+    
+    .admin-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .btn-activate {
+      background: var(--success);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: var(--transition);
+    }
+    
+    .btn-activate:hover {
+      opacity: 0.9;
+    }
+    
+    .btn-delete {
+      background: var(--danger);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: var(--transition);
+    }
+    
+    .btn-delete:hover {
+      opacity: 0.9;
+    }
+    
+    .status-badge {
+      padding: 5px 12px;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      display: inline-block;
+    }
+    
+    .status-active {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    
+    .status-inactive {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    
+    /* Panel de mensajero */
+    #panel-mensajero {
+      display: none;
+    }
+    
+    #map, #map-seguimiento {
+      height: 500px;
+      border-radius: var(--border-radius);
+      margin-bottom: 25px;
+      box-shadow: var(--sombra);
+      overflow: hidden;
+    }
+    
+    /* Barra de progreso */
+    .progress-container {
+      margin: 25px 0;
+    }
+    
+    .progress-bar {
+      height: 6px;
+      background: var(--light-gray);
+      border-radius: 3px;
+      position: relative;
+      margin-bottom: 40px;
+    }
+    
+    .progress {
+      height: 100%;
+      background: var(--primary);
+      border-radius: 3px;
+      width: 25%;
+      transition: width 0.5s ease;
+    }
+    
+    .progress-steps {
+      display: flex;
+      justify-content: space-between;
+      position: absolute;
+      width: 100%;
+      top: 15px;
+    }
+    
+    .progress-step {
+      position: relative;
+      text-align: center;
+      width: 24%;
+    }
+    
+    .progress-step::before {
+      content: "";
+      width: 16px;
+      height: 16px;
+      background: var(--light-gray);
+      border-radius: 50%;
+      display: block;
+      margin: 0 auto 10px;
+      position: relative;
+      z-index: 2;
+    }
+    
+    .progress-step.active::before {
+      background: var(--primary);
+      border: 4px solid white;
+      box-shadow: 0 0 0 2px var(--primary);
+    }
+    
+    .progress-step.completed::before {
+      background: var(--primary);
+    }
+    
+    .progress-step.completed .progress-title {
+      color: var(--primary);
+      font-weight: 600;
+    }
+    
+    .progress-title {
+      font-size: 0.85rem;
+      color: var(--gray);
+      white-space: nowrap;
+    }
+    
+    /* Footer */
+    footer {
+      background: white;
+      padding: 20px 0;
+      text-align: center;
+      margin-top: 40px;
+      border-top: 1px solid var(--light-gray);
+    }
+    
+    footer p {
+      color: var(--gray);
+      font-size: 0.9rem;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .contenedor {
+        padding: 0 15px;
+      }
+      
+      .auth-container {
+        max-width: 100%;
+      }
+      
+      .admin-table {
+        display: block;
+        overflow-x: auto;
+      }
+      
+      .social-login {
+        flex-direction: column;
+      }
+      
+      .btn-group {
+        flex-direction: column;
+      }
+      
+      .btn {
+        min-width: 100%;
+      }
+      
+      #map, #map-seguimiento {
+        height: 400px;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      header h1 {
+        font-size: 2rem;
+      }
+      
+      .auth-header {
+        padding: 20px 15px;
+      }
+      
+      .auth-form {
+        padding: 20px 15px;
+      }
+      
+      .progress-steps {
+        flex-wrap: wrap;
+      }
+      
+      .progress-step {
+        width: 50%;
+        margin-bottom: 20px;
+      }
+      
+      .progress-step:nth-child(3), .progress-step:nth-child(4) {
+        margin-top: 30px;
+      }
+      
+      .modal-content {
+        margin: 10% auto;
+        padding: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="contenedor">
+      <h1>A TU PUERTA</h1>
+      <p>Panel de Mensajeros</p>
+    </div>
+  </header>
+
+  <div class="contenedor">
+    <!-- Panel de Autenticación Simplificado -->
+    <div id="login-container" class="auth-container">
+      <div class="auth-header">
+        <h2>Acceso al Panel</h2>
+      </div>
+      
+      <!-- Formulario de inicio de sesión único -->
+      <div class="auth-form">
+        <div class="form-group">
+          <label for="login-identifier">Email o Teléfono</label>
+          <div class="input-icon">
+            <i class="fas fa-user"></i>
+            <input type="text" id="login-identifier" placeholder="tu@email.com o 5351234567">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Contraseña</label>
+          <div class="input-icon">
+            <i class="fas fa-lock"></i>
+            <input type="password" id="login-password" placeholder="Tu contraseña">
+          </div>
+        </div>
+        <button class="auth-btn" id="login-btn">
+          <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+        </button>
+        
+        <div class="auth-footer">
+          <a href="#" id="forgot-password">¿Olvidaste tu contraseña?</a>
+          <p>¿No tienes una cuenta? <a href="#" id="show-register-modal">Registrarse</a></p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Panel de Mensajero (se muestra después del login) -->
+    <div id="panel-mensajero" style="display: none;">
+      <h2>Pedidos disponibles</h2>
+      <div id="map"></div>
+      
+      <div id="seguimiento-container" style="display: none;">
+        <h2>Seguimiento de pedido: <span id="pedido-id"></span></h2>
+        <div id="map-seguimiento"></div>
+        
+        <!-- Barra de progreso horizontal -->
+        <div class="progress-container">
+          <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+          </div>
+          <div class="progress-steps">
+            <div class="progress-step" id="step-proceso">
+              <div class="progress-title">En proceso</div>
+            </div>
+            <div class="progress-step" id="step-asignado">
+              <div class="progress-title">Asignado</div>
+            </div>
+            <div class="progress-step" id="step-camino">
+              <div class="progress-title">En camino</div>
+            </div>
+            <div class="progress-step" id="step-entregado">
+              <div class="progress-title">Entregado</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="pedido-info-card">
+          <h3>Detalles del pedido</h3>
+          <p><strong>Ubicación destino:</strong> <span id="ubicacion-destino"></span></p>
+          <p><strong>Costo mensajería:</strong> <span id="costo-mensajeria"></span> CUP</p>
+          <p><strong>Estado:</strong> <span id="estado-pedido">Asignado</span></p>
+          
+          <!-- Grupo de botones modificados -->
+          <div class="btn-group">
+            <button id="btn-iniciar-entrega" class="btn" style="display: none;">
+              <i class="fas fa-play-circle"></i> Iniciar entrega
+            </button>
+            <button id="btn-comenzar-entrega" class="btn" style="display: none;">
+              <i class="fas fa-road"></i> Comenzar entrega
+            </button>
+            <button id="btn-finalizar-entrega" class="btn" style="display: none;">
+              <i class="fas fa-flag-checkered"></i> Finalizar entrega
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Panel de Administración -->
+    <div id="admin-panel" class="admin-panel">
+      <div class="admin-header">
+        <h2>Panel de Administración</h2>
+        <button id="logout-admin-btn" class="auth-btn secondary">
+          <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+        </button>
+      </div>
+      
+      <h3>Gestión de Mensajeros</h3>
+      
+      <div class="form-group">
+        <div class="input-icon">
+          <i class="fas fa-search"></i>
+          <input type="text" id="search-courier" placeholder="Buscar mensajero...">
+        </div>
+      </div>
+      
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Teléfono</th>
+            <th>Email</th>
+            <th>Vehículo</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="couriers-list">
+          <!-- Se llena dinámicamente -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Botón flotante para ubicación manual -->
+  <div id="btn-ubicacion-manual" class="btn-flotante" style="display: none;">
+    <i class="fas fa-map-marker-alt"></i>
+  </div>
+
+  <!-- Modal de detalles del pedido -->
+  <div id="modal-detalles" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="document.getElementById('modal-detalles').style.display = 'none'">&times;</span>
+      <h2>Detalles del Pedido</h2>
+      <div id="detalles-pedido"></div>
+      <button onclick="aceptarPedido()" class="btn">Aceptar Pedido</button>
+    </div>
+  </div>
+
+  <!-- Modal para tipo de ubicación -->
+  <div id="modal-tipo-ubicacion" class="modal modal-tipo-ubicacion">
+    <div class="modal-content">
+      <span class="close" onclick="document.getElementById('modal-tipo-ubicacion').style.display = 'none'">&times;</span>
+      <h2>Cambiar tipo de ubicación</h2>
+      <p id="modal-tipo-ubicacion-texto"></p>
+      <div class="btn-group">
+        <button id="btn-cambiar-tipo-ubicacion" class="btn">Cambiar</button>
+        <button onclick="document.getElementById('modal-tipo-ubicacion').style.display = 'none'" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de registro -->
+  <div id="modal-registro" class="modal modal-registro">
+    <div class="modal-content">
+      <span class="close" onclick="document.getElementById('modal-registro').style.display = 'none'">&times;</span>
+      <h2>Registro de Mensajero</h2>
+      <div class="form-group">
+        <label for="modal-courier-nombres">Nombres</label>
+        <div class="input-icon">
+          <i class="fas fa-user"></i>
+          <input type="text" id="modal-courier-nombres" placeholder="Tus nombres">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="modal-courier-apellidos">Apellidos</label>
+        <div class="input-icon">
+          <i class="fas fa-user"></i>
+          <input type="text" id="modal-courier-apellidos" placeholder="Tus apellidos">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="modal-courier-ci">Carnet de Identidad</label>
+        <div class="input-icon">
+          <i class="fas fa-id-card"></i>
+          <input type="text" id="modal-courier-ci" placeholder="Número de carnet">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="modal-courier-telefono">Teléfono</label>
+        <div class="input-icon">
+          <i class="fas fa-phone"></i>
+          <input type="tel" id="modal-courier-telefono" placeholder="5351234567">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="modal-courier-email">Email</label>
+        <div class="input-icon">
+          <i class="fas fa-envelope"></i>
+          <input type="email" id="modal-courier-email" placeholder="tu@email.com">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="modal-courier-password">Contraseña</label>
+        <div class="input-icon">
+          <i class="fas fa-lock"></i>
+          <input type="password" id="modal-courier-password" placeholder="Mínimo 6 caracteres">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="modal-courier-vehiculo">Tipo de Vehículo</label>
+        <div class="input-icon">
+          <i class="fas fa-car"></i>
+          <select id="modal-courier-vehiculo">
+            <option value="moto">Moto</option>
+            <option value="motorina">Motorina</option>
+            <option value="triciclo_electrico">Triciclo eléctrico</option>
+            <option value="motoneta">Motoneta</option>
+          </select>
+        </div>
+      </div>
+      <button class="auth-btn" id="modal-courier-register-btn">
+        <i class="fas fa-user-plus"></i> Registrarse
+      </button>
+    </div>
+  </div>
+
+  <footer>
+    <div class="contenedor">
+      <p>© 2025 A TU PUERTA - Todos los derechos reservados</p>
+    </div>
+  </footer>
+
+  <script>
+    // ================== CONFIGURACIÓN SUPABASE ==================
+    const SUPABASE_URL = 'https://uxpzlqthvjwwjgykwdjx.supabase.co'; // Reemplaza con tu URL
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4cHpscXRodmp3d2pneWt3ZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0OTMzMDAsImV4cCI6MjA3MDA2OTMwMH0._dgG6Mzit3e4S2m8Lqr9My8OrJTqxHJBsE4DIa92Xrc'; // Reemplaza con tu API Key
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Configuración
+    const config = {
+      puntoVenta: {lat: 22.401355, lng: -79.970718},
+      backendUrl: "https://backend-service-6ang.onrender.com/api",
+      socketServer: "https://websocket-service-i32d.onrender.com"
+    };
+
+    // Variables globales
+    let map = null;
+    let mapSeguimiento = null;
+    let pedidoActivo = null;
+    let pedidoSeleccionado = null;
+    let socket = null;
+    let mensajeroMarker = null;
+    let trackingInterval = null;
+    let telefonoMensajero = null;
+    let markers = [];
+    let rutaLayer = null;
+    let rutaPuntoVentaLayer = null;
+    let modoUbicacionManual = false;
+    let marcadorManual = null;
+
+    // ==================== SISTEMA DE AUTENTICACIÓN ====================
+    // Mostrar modal de registro
+    document.getElementById('show-register-modal').addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('modal-registro').style.display = 'block';
+    });
+
+    // Recuperar contraseña
+    document.getElementById('forgot-password').addEventListener('click', function(e) {
+      e.preventDefault();
+      const identifier = document.getElementById('login-identifier').value.trim();
+      
+      if (!identifier) {
+        alert('Por favor ingresa tu email o teléfono');
+        return;
+      }
+      
+      supabase.auth.resetPasswordForEmail(identifier)
+        .then(({ data, error }) => {
+          if (error) throw error;
+          alert(`Se ha enviado un correo de restablecimiento a ${identifier}`);
+        })
+        .catch(error => {
+          alert(`Error: ${error.message}`);
+        });
+    }
+
+    // Registrar mensajero desde modal
+    document.getElementById('modal-courier-register-btn').addEventListener('click', registerCourierModal);
+
+    async function registerCourierModal() {
+      const nombres = document.getElementById('modal-courier-nombres').value.trim();
+      const apellidos = document.getElementById('modal-courier-apellidos').value.trim();
+      const ci = document.getElementById('modal-courier-ci').value.trim();
+      const telefono = document.getElementById('modal-courier-telefono').value.trim();
+      const email = document.getElementById('modal-courier-email').value.trim();
+      const password = document.getElementById('modal-courier-password').value;
+      const vehiculo = document.getElementById('modal-courier-vehiculo').value;
+
+      // Validación
+      if (!nombres || !apellidos || !ci || !telefono || !email || !password) {
+        alert('Por favor complete todos los campos');
+        return;
+      }
+
+      if (password.length < 6) {
+        alert('La contraseña debe tener al menos 6 caracteres');
+        return;
+      }
+
+      try {
+        // Crear usuario en Supabase Auth
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              nombres,
+              apellidos,
+              ci,
+              telefono,
+              vehiculo
+            }
+          }
+        });
+        
+        if (error) throw error;
+        
+        // Guardar datos adicionales en tabla users
+        const { error: dbError } = await supabase
+          .from('users')
+          .insert([{
+            id: data.user.id,
+            email,
+            role: 'mensajero',
+            estado: 'pendiente',
+            nombres,
+            apellidos,
+            ci,
+            telefono,
+            vehiculo
+          }]);
+        
+        if (dbError) throw dbError;
+        
+        alert('Registro exitoso. Tu cuenta será activada por un administrador.');
+        document.getElementById('modal-registro').style.display = 'none';
+        
+      } catch (error) {
+        console.error('Error en registro:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+
+    // Login único para todos los usuarios
+    document.getElementById('login-btn').addEventListener('click', loginUser);
+
+    async function loginUser() {
+      const identifier = document.getElementById('login-identifier').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      if (!identifier || !password) {
+        alert('Por favor complete todos los campos');
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: identifier,
+          password
+        });
+        
+        if (error) {
+          alert('Error en login: ' + error.message);
+          return;
+        }
+        
+        // Obtener datos adicionales del usuario
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (userError) {
+          alert('Error obteniendo datos de usuario: ' + userError.message);
+          return;
+        }
+        
+        if (userData.role === 'admin') {
+          // Login como administrador
+          alert('¡Bienvenido administrador!');
+          document.getElementById('login-container').style.display = 'none';
+          document.getElementById('admin-panel').style.display = 'block';
+          document.getElementById('panel-mensajero').style.display = 'none';
+          loadCouriersList();
+        } else if (userData.role === 'mensajero') {
+          if (userData.estado !== 'activo') {
+            await supabase.auth.signOut();
+            alert('Tu cuenta de mensajero no está activa. Contacta al administrador.');
+            return;
+          }
+          
+          // Login como mensajero
+          alert('¡Bienvenido mensajero!');
+          document.getElementById('login-container').style.display = 'none';
+          document.getElementById('panel-mensajero').style.display = 'block';
+          document.getElementById('admin-panel').style.display = 'none';
+          
+          // Iniciar el resto de la lógica del mensajero
+          initMap();
+          cargarPedidosDisponibles();
+          initSocket();
+          telefonoMensajero = userData.telefono;
+        } else {
+          // Usuario no autorizado
+          await supabase.auth.signOut();
+          alert('No tienes permisos para acceder a esta sección');
+        }
+        
+      } catch (error) {
+        console.error('Error en login:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+
+    // Cerrar sesión admin
+    document.getElementById('logout-admin-btn').addEventListener('click', () => {
+      supabase.auth.signOut();
+    });
+
+    // Cargar lista de mensajeros (solo para admin)
+    async function loadCouriersList() {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('role', 'mensajero');
+        
+        if (error) throw error;
+        
+        const couriersList = document.getElementById('couriers-list');
+        couriersList.innerHTML = '';
+        
+        data.forEach(courier => {
+          const row = document.createElement('tr');
+          
+          row.innerHTML = `
+            <td>${courier.nombres} ${courier.apellidos}</td>
+            <td>${courier.telefono}</td>
+            <td>${courier.email}</td>
+            <td>${courier.vehiculo}</td>
+            <td>
+              <span class="status-badge ${courier.estado === 'activo' ? 'status-active' : 'status-inactive'}">
+                ${courier.estado === 'activo' ? 'Activo' : 'Inactivo'}
+              </span>
+            </td>
+            <td class="admin-actions">
+              <button class="btn-activate" onclick="toggleCourierStatus('${courier.id}', ${courier.estado !== 'activo'})">
+                ${courier.estado === 'activo' ? 'Desactivar' : 'Activar'}
+              </button>
+              <button class="btn-delete" onclick="deleteCourier('${courier.id}')">Eliminar</button>
+            </td>
+          `;
+          
+          couriersList.appendChild(row);
+        });
+      } catch (error) {
+        console.error('Error cargando mensajeros:', error);
+        alert('Error al cargar la lista de mensajeros');
+      }
+    }
+
+    // Cambiar estado de mensajero (solo para admin)
+    async function toggleCourierStatus(userId, newStatus) {
+      if (!confirm(`¿Estás seguro de ${newStatus ? 'activar' : 'desactivar'} este mensajero?`)) return;
+      
+      try {
+        const { error } = await supabase
+          .from('users')
+          .update({ estado: newStatus ? 'activo' : 'inactivo' })
+          .eq('id', userId);
+        
+        if (error) throw error;
+        
+        alert(`Mensajero ${newStatus ? 'activado' : 'desactivado'} correctamente`);
+        loadCouriersList();
+      } catch (error) {
+        console.error('Error cambiando estado:', error);
+        alert('Error al cambiar el estado del mensajero');
+      }
+    }
+
+    // Eliminar mensajero (solo para admin)
+    async function deleteCourier(userId) {
+      if (!confirm('¿Estás seguro de eliminar este mensajero? Esta acción no se puede deshacer.')) return;
+      
+      try {
+        // Primero eliminar de autenticación
+        const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+        if (authError) throw authError;
+        
+        // Luego eliminar de la tabla users
+        const { error: dbError } = await supabase
+          .from('users')
+          .delete()
+          .eq('id', userId);
+        
+        if (dbError) throw dbError;
+        
+        alert('Mensajero eliminado correctamente');
+        loadCouriersList();
+      } catch (error) {
+        console.error('Error eliminando mensajero:', error);
+        alert('Error al eliminar el mensajero');
+      }
+    }
+
+    // Estado de autenticación
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        supabase.from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+          .then(({ data: userData }) => {
+            if (userData) {
+              if (userData.role === 'admin') {
+                // Mostrar panel de admin
+                document.getElementById('login-container').style.display = 'none';
+                document.getElementById('admin-panel').style.display = 'block';
+                document.getElementById('panel-mensajero').style.display = 'none';
+                loadCouriersList();
+              } else if (userData.role === 'mensajero' && userData.estado === 'activo') {
+                // Mostrar panel de mensajero
+                document.getElementById('login-container').style.display = 'none';
+                document.getElementById('panel-mensajero').style.display = 'block';
+                document.getElementById('admin-panel').style.display = 'none';
+                telefonoMensajero = userData.telefono;
+              } else if (userData.role === 'mensajero' && userData.estado !== 'activo') {
+                // Mensajero no activo
+                supabase.auth.signOut();
+                alert('Tu cuenta de mensajero no está activa. Contacta al administrador.');
+              } else {
+                // Usuario no autorizado
+                supabase.auth.signOut();
+                alert('No tienes permisos para acceder a esta sección');
+              }
+            }
+          });
+      } else {
+        // No autenticado
+        document.getElementById('login-container').style.display = 'block';
+        document.getElementById('panel-mensajero').style.display = 'none';
+        document.getElementById('admin-panel').style.display = 'none';
+      }
+    });
+
+    // ==================== FUNCIONALIDAD DEL MENSAJERO ====================
+    // Función para agregar logs
+    function addLog(message) {
+      console.log(`[${new Date().toLocaleTimeString()}] ${message}`);
+    }
+
+    // Inicializar mapa principal
+    function initMap() {
+      if (map) map.remove();
+      map = L.map('map').setView([config.puntoVenta.lat, config.puntoVenta.lng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+
+      // Marcador de punto de venta
+      L.marker([config.puntoVenta.lat, config.puntoVenta.lng], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(map).bindPopup('Punto de venta');
+    }
+
+    // Inicializar mapa de seguimiento
+    async function initSeguimientoMap() {
+      if (!pedidoActivo) return;
+      
+      if (mapSeguimiento) mapSeguimiento.remove();
+      mapSeguimiento = L.map('map-seguimiento').setView([
+        config.puntoVenta.lat, 
+        config.puntoVenta.lng
+      ], 13);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapSeguimiento);
+      
+      // Marcador de punto de venta
+      L.marker([
+        config.puntoVenta.lat,
+        config.puntoVenta.lng
+      ], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(mapSeguimiento).bindPopup('Punto de venta');
+
+      // Marcador de destino
+      L.marker([
+        pedidoActivo.ubicacion_entrega.lat,
+        pedidoActivo.ubicacion_entrega.lng
+      ], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(mapSeguimiento).bindPopup('Destino de entrega');
+    }
+
+    // Actualizar mapa de seguimiento y verificar proximidades
+    function actualizarMapaSeguimiento(lat, lng) {
+      if (!mapSeguimiento) return;
+      
+      if (modoUbicacionManual && marcadorManual) {
+        // Modo manual: actualizar marcador existente
+        marcadorManual.setLatLng([lat, lng]);
+      } else {
+        // Modo automático: crear o actualizar marcador
+        if (mensajeroMarker) {
+          mensajeroMarker.setLatLng([lat, lng]);
+        } else {
+          mensajeroMarker = L.marker([lat, lng], {
+            icon: L.icon({
+              iconUrl: 'img/icono_mensajero.png',
+              iconSize: [32, 32],
+              iconAnchor: [16, 32]
+            })
+          }).addTo(mapSeguimiento).bindPopup('Mensajero');
+          
+          // Evento para cambiar tipo de ubicación al hacer clic en el marcador
+          mensajeroMarker.on('click', function() {
+            mostrarModalTipoUbicacion();
+          });
+        }
+      }
+      
+      mapSeguimiento.setView([lat, lng], 15);
+      
+      // Verificar proximidades siempre que se actualice la ubicación
+      verificarProximidades(lat, lng);
+    }
+
+    // Verificar proximidades a puntos clave
+    function verificarProximidades(lat, lng) {
+      if (!pedidoActivo) return;
+      
+      // Verificar si está cerca del punto de venta (30 metros)
+      const distanciaVenta = Math.sqrt(
+        Math.pow(lat - config.puntoVenta.lat, 2) + 
+        Math.pow(lng - config.puntoVenta.lng, 2)
+      ) * 111000; // Convertir grados a metros
+      
+      // Mostrar "Comenzar entrega" si está cerca de la tienda
+      if (distanciaVenta <= 30 && document.getElementById('btn-comenzar-entrega').style.display === 'none' && 
+          document.getElementById('btn-finalizar-entrega').style.display === 'none') {
+        document.getElementById('btn-comenzar-entrega').style.display = 'block';
+        addLog('¡Has llegado al punto de venta!');
+      }
+      
+      // Verificar si está cerca del punto de entrega (30 metros)
+      const distanciaEntrega = Math.sqrt(
+        Math.pow(lat - pedidoActivo.ubicacion_entrega.lat, 2) + 
+        Math.pow(lng - pedidoActivo.ubicacion_entrega.lng, 2)
+      ) * 111000;
+      
+      if (distanciaEntrega <= 30 && !document.getElementById('step-entregado').classList.contains('active')) {
+        document.getElementById('btn-finalizar-entrega').style.display = 'block';
+        addLog('¡Has llegado al destino!');
+      }
+    }
+
+    // Obtener pedidos disponibles
+    async function cargarPedidosDisponibles() {
+      try {
+        const { data, error } = await supabase
+          .from('pedidos_entregados')
+          .select('*')
+          .eq('estado', 'en proceso');
+        
+        if (error) throw error;
+        
+        mostrarPedidosEnMapa(data);
+      } catch (error) {
+        console.error('Error cargando pedidos:', error);
+        addLog('Error cargando pedidos: ' + error.message);
+      }
+    }
+
+    // Mostrar pedidos disponibles en el mapa
+    function mostrarPedidosEnMapa(pedidos) {
+      markers.forEach(marker => map.removeLayer(marker));
+      markers = [];
+      
+      if (pedidos.length === 0) {
+        addLog('No hay pedidos disponibles');
+        return;
+      }
+      
+      // Crear un grupo para ajustar el mapa
+      const markerGroup = [];
+      
+      pedidos.forEach(pedido => {
+        const ubicacionEntrega = JSON.parse(pedido.ubicacion_entrega);
+        
+        const marker = L.marker([
+          ubicacionEntrega.lat,
+          ubicacionEntrega.lng
+        ], {
+          icon: L.icon({
+            iconUrl: 'img/icono_entrega.png',
+            iconSize: [24, 24],
+            iconAnchor: [12, 24]
+          })
+        }).addTo(map).bindPopup(`Pedido #${pedido.pedido_id.slice(-6)}`);
+        
+        // Al hacer clic en el marcador, mostrar el modal
+        marker.on('click', () => {
+          mostrarDetallesPedido(pedido);
+        });
+        
+        markers.push(marker);
+        markerGroup.push(marker.getLatLng());
+      });
+      
+      // Ajustar el mapa para que muestre todos los marcadores
+      if (markerGroup.length > 0) {
+        const group = new L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.2));
+      }
+      
+      addLog(`Mostrando ${pedidos.length} pedidos disponibles`);
+    }
+
+    // Función para mostrar detalles del pedido en modal
+    function mostrarDetallesPedido(pedido) {
+      const modal = document.getElementById('modal-detalles');
+      const detalles = document.getElementById('detalles-pedido');
+      
+      // Crear lista de productos
+      const productos = JSON.parse(pedido.productos);
+      const productosHTML = productos.map(p => 
+        `<li>${p.nombre} x ${p.cantidad} - ${p.precio * p.cantidad} CUP</li>`
+      ).join('');
+      
+      detalles.innerHTML = `
+        <h3>Pedido #${pedido.pedido_id.slice(-6)}</h3>
+        <p><strong>Ubicación entrega:</strong> ${JSON.parse(pedido.ubicacion_entrega).lat.toFixed(6)}, ${JSON.parse(pedido.ubicacion_entrega).lng.toFixed(6)}</p>
+        <p><strong>Distancia:</strong> ${pedido.distancia_km} km</p>
+        <p><strong>Costo mensajería:</strong> ${pedido.precio_delivery} CUP</p>
+        <h4>Productos:</h4>
+        <ul>${productosHTML}</ul>
+      `;
+      
+      modal.style.display = 'block';
+      pedidoSeleccionado = pedido;
+    }
+
+    // Función para aceptar pedido
+    async function aceptarPedido() {
+      if (!pedidoSeleccionado) return;
+      
+      try {
+        // Actualizar pedido en Supabase
+        const { error } = await supabase
+          .from('pedidos_entregados')
+          .update({
+            estado: 'asignado',
+            mensajero_id: (await supabase.auth.getUser()).data.user.id
+          })
+          .eq('pedido_id', pedidoSeleccionado.pedido_id);
+        
+        if (error) throw error;
+        
+        document.getElementById('modal-detalles').style.display = 'none';
+        pedidoActivo = pedidoSeleccionado;
+        pedidoSeleccionado = null;
+        
+        // Mostrar sección de seguimiento
+        document.getElementById('seguimiento-container').style.display = 'block';
+        document.getElementById('pedido-id').textContent = pedidoActivo.pedido_id.slice(-6);
+        
+        const ubicacionEntrega = JSON.parse(pedidoActivo.ubicacion_entrega);
+        document.getElementById('ubicacion-destino').textContent = 
+          `${ubicacionEntrega.lat.toFixed(6)}, ${ubicacionEntrega.lng.toFixed(6)}`;
+        document.getElementById('costo-mensajeria').textContent = 
+          pedidoActivo.precio_delivery;
+        
+        // Inicializar mapa de seguimiento con la ruta
+        initSeguimientoMap();
+        
+        // Mostrar botón "Iniciar entrega"
+        document.getElementById('btn-iniciar-entrega').style.display = 'block';
+        
+        // Mostrar botón flotante para ubicación manual
+        document.getElementById('btn-ubicacion-manual').style.display = 'block';
+        
+        // Actualizar estado automáticamente
+        actualizarBarraProgreso('asignado');
+        
+        addLog(`Pedido #${pedidoActivo.pedido_id.slice(-6)} aceptado`);
+      } catch (error) {
+        addLog(`Error aceptando pedido: ${error.message}`);
+        alert(`Error: ${error.message}`);
+      }
+    }
+
+    // Función para actualizar la barra de progreso
+    function actualizarBarraProgreso(estado) {
+      const estados = ['en proceso', 'asignado', 'en camino', 'entregado'];
+      const estadoIndex = estados.indexOf(estado);
+      const progressPercentage = estadoIndex >= 0 ? (estadoIndex / (estados.length - 1)) * 100 : 0;
+      
+      document.getElementById('progress').style.width = `${progressPercentage}%`;
+      document.getElementById('estado-pedido').textContent = estado;
+      
+      estados.forEach((est, index) => {
+        const stepId = `step-${est.replace(' ', '-')}`;
+        const step = document.getElementById(stepId);
+        if (step) {
+          step.classList.remove('completed', 'active');
+          if (index < estadoIndex) {
+            step.classList.add('completed');
+          }
+          if (index === estadoIndex) {
+            step.classList.add('active');
+          }
+        }
+      });
+    }
+
+    // Función para actualizar el estado del pedido
+    async function actualizarEstadoPedido(estado) {
+      try {
+        // Actualizar en Supabase
+        const { error } = await supabase
+          .from('pedidos_entregados')
+          .update({ estado: estado })
+          .eq('pedido_id', pedidoActivo.pedido_id);
+        
+        if (error) throw error;
+        
+        addLog(`Estado actualizado a: ${estado}`);
+        
+        // Actualizar barra de progreso
+        actualizarBarraProgreso(estado);
+        return true;
+      } catch (error) {
+        addLog(`Error actualizando estado: ${error.message}`);
+        return false;
+      }
+    }
+
+    // Iniciar seguimiento de ubicación
+    function iniciarSeguimientoUbicacion() {
+      if (trackingInterval) clearInterval(trackingInterval);
+      
+      trackingInterval = setInterval(() => {
+        if (navigator.geolocation && !modoUbicacionManual) {
+          navigator.geolocation.getCurrentPosition(
+            position => {
+              const lat = position.coords.latitude;
+              const lng = position.coords.longitude;
+              
+              actualizarMapaSeguimiento(lat, lng);
+              
+              if (socket && socket.connected) {
+                socket.emit('actualizar_ubicacion', {
+                  pedidoId: pedidoActivo.pedido_id,
+                  lat,
+                  lng
+                });
+                addLog(`Ubicación actualizada: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+              }
+            },
+            error => {
+              addLog(`Error de geolocalización: ${error.message}`);
+            }
+          );
+        }
+      }, 5000);
+    }
+
+    // Función para dibujar ruta al punto de venta
+    async function dibujarRutaAlPuntoVenta(origen, destino) {
+      try {
+        const response = await fetch(`${config.backendUrl}/ruta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origen: origen,
+            destino: destino
+          })
+        });
+        
+        const data = await response.json();
+        const coords = polyline.decode(data.geometria);
+        const latLngs = coords.map(coord => L.latLng(coord[0], coord[1]));
+        
+        if (rutaPuntoVentaLayer) {
+          mapSeguimiento.removeLayer(rutaPuntoVentaLayer);
+        }
+        
+        rutaPuntoVentaLayer = L.polyline(latLngs, {
+          color: '#4caf50',
+          weight: 6,
+          opacity: 0.8,
+          lineJoin: 'round'
+        }).addTo(mapSeguimiento);
+        
+        const bounds = L.latLngBounds(latLngs);
+        mapSeguimiento.fitBounds(bounds);
+        
+      } catch (error) {
+        addLog(`Error dibujando ruta: ${error.message}`);
+      }
+    }
+
+    // Función para dibujar ruta al cliente
+    async function dibujarRutaAlCliente(origen, destino) {
+      try {
+        const response = await fetch(`${config.backendUrl}/ruta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application.json' },
+          body: JSON.stringify({
+            origen: origen,
+            destino: destino
+          })
+        });
+        
+        const data = await response.json();
+        const coords = polyline.decode(data.geometria);
+        const latLngs = coords.map(coord => L.latLng(coord[0], coord[1]));
+        
+        if (rutaLayer) {
+          mapSeguimiento.removeLayer(rutaLayer);
+        }
+        
+        rutaLayer = L.polyline(latLngs, {
+          color: '#d62828',
+          weight: 6,
+          opacity: 0.8,
+          lineJoin: 'round'
+        }).addTo(mapSeguimiento);
+        
+        const bounds = L.latLngBounds(latLngs);
+        mapSeguimiento.fitBounds(bounds);
+        
+      } catch (error) {
+        addLog(`Error dibujando ruta: ${error.message}`);
+      }
+    }
+
+    // Función para mostrar modal de tipo de ubicación
+    function mostrarModalTipoUbicacion() {
+      const modal = document.getElementById('modal-tipo-ubicacion');
+      const texto = document.getElementById('modal-tipo-ubicacion-texto');
+      const btnCambiar = document.getElementById('btn-cambiar-tipo-ubicacion');
+      
+      if (modoUbicacionManual) {
+        texto.textContent = '¿Volver a ubicación automática?';
+        btnCambiar.textContent = 'Automática';
+        btnCambiar.onclick = function() {
+          cambiarTipoUbicacion(false);
+          modal.style.display = 'none';
+        };
+      } else {
+        texto.textContent = '¿Cambiar a ubicación manual? En este modo, podrás establecer tu ubicación haciendo clic en el mapa.';
+        btnCambiar.textContent = 'Manual';
+        btnCambiar.onclick = function() {
+          cambiarTipoUbicacion(true);
+          modal.style.display = 'none';
+        };
+      }
+      
+      modal.style.display = 'block';
+    }
+
+    // Función para cambiar el tipo de ubicación
+    function cambiarTipoUbicacion(manual) {
+      modoUbicacionManual = manual;
+      
+      if (modoUbicacionManual) {
+        // Detener seguimiento automático
+        if (trackingInterval) {
+          clearInterval(trackingInterval);
+          trackingInterval = null;
+        }
+        
+        // Crear marcador manual si no existe
+        if (!marcadorManual) {
+          const currentPos = mensajeroMarker ? mensajeroMarker.getLatLng() : config.puntoVenta;
+          marcadorManual = L.marker([currentPos.lat, currentPos.lng], {
+            icon: L.icon({
+              iconUrl: 'img/icono_mensajero.png',
+              iconSize: [32, 32],
+              iconAnchor: [16, 32]
+            }),
+            draggable: true
+          }).addTo(mapSeguimiento);
+          
+          // Evento para arrastrar marcador
+          marcadorManual.on('dragend', function(event) {
+            const marker = event.target;
+            const position = marker.getLatLng();
+            
+            // Actualizar ubicación
+            actualizarMapaSeguimiento(position.lat, position.lng);
+            
+            // Enviar al servidor
+            if (socket && socket.connected) {
+              socket.emit('actualizar_ubicacion', {
+                pedidoId: pedidoActivo.pedido_id,
+                lat: position.lat,
+                lng: position.lng
+              });
+              addLog(`Ubicación manual actualizada: ${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`);
+            }
+          });
+          
+          // Evento para cambiar tipo de ubicación
+          marcadorManual.on('click', function() {
+            mostrarModalTipoUbicacion();
+          });
+        }
+        
+        // Eliminar marcador automático si existe
+        if (mensajeroMarker) {
+          mapSeguimiento.removeLayer(mensajeroMarker);
+          mensajeroMarker = null;
+        }
+        
+        // Evento para hacer clic en el mapa
+        mapSeguimiento.on('click', function(e) {
+          const lat = e.latlng.lat;
+          const lng = e.latlng.lng;
+          
+          // Actualizar ubicación del marcador manual
+          marcadorManual.setLatLng([lat, lng]);
+          
+          // Enviar al servidor
+          if (socket && socket.connected) {
+            socket.emit('actualizar_ubicacion', {
+              pedidoId: pedidoActivo.pedido_id,
+              lat,
+              lng
+            });
+            addLog(`Ubicación manual actualizada: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          }
+        });
+        
+        addLog('Modo manual activado: Haz clic en el mapa para establecer tu ubicación');
+      } else {
+        // Eliminar marcador manual si existe
+        if (marcadorManual) {
+          mapSeguimiento.removeLayer(marcadorManual);
+          marcadorManual = null;
+        }
+        
+        // Eliminar evento de clic del mapa
+        mapSeguimiento.off('click');
+        
+        // Reanudar seguimiento automático
+        iniciarSeguimientoUbicacion();
+        
+        addLog('Modo automático activado');
+      }
+    }
+
+    // Inicializar WebSocket
+    function initSocket() {
+      socket = io(config.socketServer, {
+        transports: ['websocket'],
+        reconnection: true
+      });
+
+      socket.on('connect', () => {
+        addLog('Conectado al servidor de seguimiento');
+      });
+
+      socket.on('disconnect', () => {
+        addLog('Desconectado del servidor');
+      });
+
+      // Escuchar actualización de estado
+      socket.on('actualizacion_estado', (data) => {
+        if (pedidoActivo && data.pedidoId === pedidoActivo.pedido_id) {
+          actualizarBarraProgreso(data.estado);
+        }
+      });
+    }
+
+    // ================== EVENT LISTENERS PARA BOTONES ==================
+    document.getElementById('btn-iniciar-entrega').addEventListener('click', async function() {
+      const exito = await actualizarEstadoPedido('asignado');
+      if (exito) {
+        this.style.display = 'none';
+        
+        // Obtener ubicación actual para trazar ruta al punto de venta
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async position => {
+              const lat = position.coords.latitude;
+              const lng = position.coords.longitude;
+              
+              // Dibujar ruta desde la ubicación actual al punto de venta
+              await dibujarRutaAlPuntoVenta(
+                { lat, lng },
+                config.puntoVenta
+              );
+              
+              // Iniciar seguimiento automático
+              iniciarSeguimientoUbicacion();
+            },
+            error => {
+              addLog(`Error obteniendo ubicación: ${error.message}`);
+            }
+          );
+        }
+      }
+    });
+    
+    document.getElementById('btn-comenzar-entrega').addEventListener('click', async function() {
+      const exito = await actualizarEstadoPedido('en camino');
+      if (exito) {
+        this.style.display = 'none';
+        
+        // Dibujar ruta desde el punto de venta al cliente
+        await dibujarRutaAlCliente(
+          config.puntoVenta,
+          JSON.parse(pedidoActivo.ubicacion_entrega)
+        );
+      }
+    });
+    
+    document.getElementById('btn-finalizar-entrega').addEventListener('click', async function() {
+      if (trackingInterval) clearInterval(trackingInterval);
+      
+      try {
+        // Actualizar estado del pedido a entregado
+        await actualizarEstadoPedido('entregado');
+        
+        addLog(`Pedido #${pedidoActivo.pedido_id.slice(-6)} entregado`);
+        alert('¡Entrega finalizada con éxito!');
+        
+        document.getElementById('seguimiento-container').style.display = 'none';
+        pedidoActivo = null;
+        mensajeroMarker = null;
+        marcadorManual = null;
+        document.getElementById('btn-ubicacion-manual').style.display = 'none';
+        cargarPedidosDisponibles();
+      } catch (error) {
+        addLog(`Error finalizando entrega: ${error.message}`);
+        alert(`Error: ${error.message}`);
+      }
+    });
+
+    // Event listener para el botón de ubicación manual
+    document.getElementById('btn-ubicacion-manual').addEventListener('click', function() {
+      mostrarModalTipoUbicacion();
+    });
+
+    // ================== INICIALIZACIÓN ==================
+    window.onload = function() {
+      // Configurar eventos
+      document.getElementById('modal-courier-register-btn').addEventListener('click', registerCourierModal);
+      document.getElementById('login-btn').addEventListener('click', loginUser);
+    };
+  </script>
+</body>
+</html>

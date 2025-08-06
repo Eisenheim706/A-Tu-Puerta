@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seguimiento de Pedido - A TU PUERTA</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="https://unpkg.com/@mapbox/polyline@1.1.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --primary: #4361ee;
+      --primary-dark: #3a56d4;
+      --success: #06d6a0;
+      --warning: #ffd166;
+      --danger: #ef476f;
+      --dark: #1e293b;
+      --light: #f8f9fa;
+      --gray: #64748b;
+      --light-gray: #e2e8f0;
+      --sombra: 0 4px 20px rgba(0, 0, 0, 0.08);
+      --border-radius: 12px;
+      --transition: all 0.3s ease;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: #f0f2f5;
+      color: var(--dark);
+      line-height: 1.6;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    header {
+      background: linear-gradient(135deg, rgba(67, 97, 238, 0.85), rgba(58, 86, 212, 0.85)),
+                 url('img/icono_logo.png') center center no-repeat;
+      background-size: cover, 200px auto;
+      background-blend-mode: overlay;
+      color: white;
+      padding: 20px 0;
+      text-align: center;
+      position: relative;
+      height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      box-shadow: var(--sombra);
+    }
+    
+    header::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.1);
+    }
+    
+    header .contenedor {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+      position: relative;
+      z-index: 2;
+    }
+    
+    header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      font-weight: 700;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    header p {
+      font-size: 1.2rem;
+      opacity: 0.9;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    
+    .contenedor {
+      max-width: 1200px;
+      margin: 30px auto;
+      padding: 0 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Barra de progreso */
+    .progress-container {
+      background: white;
+      border-radius: var(--border-radius);
+      padding: 25px;
+      margin: 25px 0;
+      box-shadow: var(--sombra);
+    }
+    
+    .progress-bar {
+      display: flex;
+      justify-content: space-between;
+      position: relative;
+      margin-top: 20px;
+    }
+    
+    .progress-bar::before {
+      content: "";
+      position: absolute;
+      top: 15px;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: var(--light-gray);
+      z-index: 1;
+    }
+    
+    .progress {
+      position: absolute;
+      top: 15px;
+      left: 0;
+      height: 4px;
+      background: var(--primary);
+      z-index: 2;
+      transition: var(--transition);
+    }
+    
+    .progress-step {
+      position: relative;
+      z-index: 3;
+      text-align: center;
+      flex: 1;
+    }
+    
+    .progress-step::before {
+      content: "";
+      width: 30px;
+      height: 30px;
+      background: var(--light-gray);
+      border-radius: 50%;
+      display: block;
+      margin: 0 auto 10px;
+      position: relative;
+      z-index: 2;
+    }
+    
+    .progress-step.active::before {
+      background: var(--primary);
+      border: 4px solid white;
+      box-shadow: 0 0 0 2px var(--primary);
+    }
+    
+    .progress-step.completed::before {
+      background: var(--primary);
+    }
+    
+    .progress-step.completed .progress-title {
+      color: var(--primary);
+      font-weight: 600;
+    }
+    
+    .progress-title {
+      font-size: 0.85rem;
+      color: var(--gray);
+      white-space: nowrap;
+    }
+    
+    /* Mapa */
+    .map-container {
+      position: relative;
+      height: 500px;
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      box-shadow: var(--sombra);
+      margin-bottom: 25px;
+      border: 1px solid var(--light-gray);
+    }
+    
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+    
+    /* Información del pedido */
+    .pedido-info {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .info-card {
+      background: white;
+      border-radius: var(--border-radius);
+      padding: 20px;
+      flex: 1;
+      min-width: 250px;
+      box-shadow: var(--sombra);
+    }
+    
+    .info-card h3 {
+      font-size: 1rem;
+      color: var(--gray);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .info-card h3 i {
+      font-size: 1.2rem;
+    }
+    
+    .info-card p {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+    
+    /* Mensajero info */
+    .mensajero-card {
+      background: white;
+      border-radius: var(--border-radius);
+      padding: 20px;
+      box-shadow: var(--sombra);
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+    
+    .mensajero-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    
+    .mensajero-info h4 {
+      font-size: 1.2rem;
+      margin-bottom: 5px;
+    }
+    
+    .mensajero-info p {
+      color: var(--gray);
+      font-size: 0.9rem;
+    }
+    
+    /* Footer */
+    footer {
+      background: white;
+      padding: 20px 0;
+      text-align: center;
+      margin-top: 40px;
+      border-top: 1px solid var(--light-gray);
+    }
+    
+    footer p {
+      color: var(--gray);
+      font-size: 0.9rem;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .contenedor {
+        padding: 0 15px;
+      }
+      
+      .progress-bar {
+        flex-wrap: wrap;
+      }
+      
+      .progress-step {
+        width: 50%;
+        margin-bottom: 20px;
+      }
+      
+      #map {
+        height: 400px;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      header h1 {
+        font-size: 2rem;
+      }
+      
+      .info-card {
+        min-width: 100%;
+      }
+      
+      .progress-step {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="contenedor">
+      <h1>A TU PUERTA</h1>
+      <p>Seguimiento de pedido en tiempo real</p>
+    </div>
+  </header>
+
+  <div class="contenedor">
+    <div id="pedido-container">
+      <!-- Carga inicial -->
+      <div id="loading" class="progress-container" style="text-align: center; padding: 50px 0;">
+        <div class="spinner" style="width: 50px; height: 50px; border: 5px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top-color: var(--primary); margin: 0 auto 20px; animation: spin 1s linear infinite;"></div>
+        <p>Cargando información del pedido...</p>
+      </div>
+      
+      <!-- Contenido del pedido -->
+      <div id="pedido-content" style="display: none;">
+        <div class="progress-container">
+          <h2><i class="fas fa-tasks"></i> Estado del pedido</h2>
+          <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+            <div class="progress-step" id="step-proceso">
+              <div class="progress-title">En proceso</div>
+            </div>
+            <div class="progress-step" id="step-asignado">
+              <div class="progress-title">Asignado</div>
+            </div>
+            <div class="progress-step" id="step-camino">
+              <div class="progress-title">En camino</div>
+            </div>
+            <div class="progress-step" id="step-entregado">
+              <div class="progress-title">Entregado</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="map-container">
+          <div id="map"></div>
+        </div>
+        
+        <div class="pedido-info">
+          <div class="info-card">
+            <h3><i class="fas fa-barcode"></i> ID Pedido</h3>
+            <p id="pedido-id">---</p>
+          </div>
+          <div class="info-card">
+            <h3><i class="fas fa-map-marker-alt"></i> Distancia</h3>
+            <p id="distancia-pedido">---</p>
+          </div>
+          <div class="info-card">
+            <h3><i class="fas fa-money-bill-wave"></i> Costo entrega</h3>
+            <p id="costo-entrega">---</p>
+          </div>
+          <div class="info-card">
+            <h3><i class="fas fa-receipt"></i> Total</h3>
+            <p id="total-pedido">---</p>
+          </div>
+        </div>
+        
+        <div id="mensajero-info" class="mensajero-card">
+          <div class="mensajero-avatar" id="mensajero-avatar">M</div>
+          <div class="mensajero-info">
+            <h4 id="mensajero-nombre">Cargando información del mensajero...</h4>
+            <p><i class="fas fa-phone"></i> <span id="mensajero-telefono">---</span></p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Mensaje de error -->
+      <div id="error-message" class="progress-container" style="display: none; text-align: center; padding: 30px;">
+        <h2 style="color: var(--danger); margin-bottom: 20px;"><i class="fas fa-exclamation-circle"></i> Error</h2>
+        <p id="error-text">No se pudo cargar la información del pedido.</p>
+        <p>Por favor verifique el ID del pedido o intente nuevamente más tarde.</p>
+        <button id="reload-button" class="btn" style="margin-top: 20px; background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 30px; cursor: pointer;">
+          <i class="fas fa-sync"></i> Reintentar
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <footer>
+    <div class="contenedor">
+      <p>© 2025 A TU PUERTA - Todos los derechos reservados</p>
+    </div>
+  </footer>
+
+  <script>
+    // Obtener ID del pedido de la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const pedidoId = urlParams.get('id');
+    
+    // Configuración de Supabase
+    const SUPABASE_URL = 'https://uxpzlqthvjwwjgykwdjx.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4cHpscXRodmp3d2pneWt3ZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0OTMzMDAsImV4cCI6MjA3MDA2OTMwMH0._dgG6Mzit3e4S2m8Lqr9My8OrJTqxHJBsE4DIa92Xrc';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    
+    // Configuración del servidor
+    const config = {
+      socketServer: "https://websocket-service-i32d.onrender.com",
+      puntoVenta: { lat: 22.401355, lng: -79.970718 }
+    };
+    
+    // Variables globales
+    let map = null;
+    let mensajeroMarker = null;
+    let destinoMarker = null;
+    let puntoVentaMarker = null;
+    let rutaLayer = null;
+    let socket = null;
+    let pedido = null;
+    let mensajero = null;
+    
+    // Función para mostrar notificaciones
+    function showNotification(title, message, type = 'info') {
+      // Implementación de notificaciones
+      console.log(`[${type.toUpperCase()}] ${title}: ${message}`);
+    }
+    
+    // Inicializar mapa
+    function initMap(ubicacionEntrega) {
+      // Crear mapa con vista centrada en el punto de venta
+      map = L.map('map').setView([config.puntoVenta.lat, config.puntoVenta.lng], 13);
+      
+      // Añadir capa de OpenStreetMap
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(map);
+      
+      // Añadir marcador del punto de venta
+      puntoVentaMarker = L.marker([config.puntoVenta.lat, config.puntoVenta.lng], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(map).bindPopup('Punto de venta');
+      
+      // Añadir marcador de destino si está disponible
+      if (ubicacionEntrega) {
+        mostrarUbicacionEntrega(ubicacionEntrega);
+      }
+    }
+    
+    // Mostrar ubicación de entrega
+    function mostrarUbicacionEntrega(ubicacion) {
+      // Eliminar marcador anterior si existe
+      if (destinoMarker) map.removeLayer(destinoMarker);
+      
+      // Crear nuevo marcador
+      destinoMarker = L.marker([ubicacion.lat, ubicacion.lng], {
+        icon: L.icon({
+          iconUrl: 'img/icono_entrega.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(map).bindPopup('Ubicación de entrega');
+      
+      // Ajustar vista del mapa para mostrar todos los elementos
+      ajustarVistaMapa();
+    }
+    
+    // Actualizar ubicación del mensajero
+    function actualizarUbicacionMensajero(lat, lng) {
+      if (!mensajeroMarker) {
+        // Crear marcador si no existe
+        mensajeroMarker = L.marker([lat, lng], {
+          icon: L.icon({
+            iconUrl: 'img/icono_mensajero.png',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32]
+          })
+        }).addTo(map).bindPopup('Mensajero');
+      } else {
+        // Actualizar posición del marcador existente
+        mensajeroMarker.setLatLng([lat, lng]);
+      }
+      
+      // Ajustar vista del mapa
+      ajustarVistaMapa();
+    }
+    
+    // Ajustar vista del mapa para mostrar todos los marcadores
+    function ajustarVistaMapa() {
+      const markers = [puntoVentaMarker, destinoMarker, mensajeroMarker].filter(m => m);
+      if (markers.length > 0) {
+        const group = new L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.2));
+      }
+    }
+    
+    // Dibujar ruta en el mapa
+    function dibujarRuta(geometria) {
+      // Eliminar ruta anterior si existe
+      if (rutaLayer) {
+        map.removeLayer(rutaLayer);
+        rutaLayer = null;
+      }
+      
+      if (!geometria) return;
+      
+      try {
+        // Decodificar geometría de polilínea
+        const coords = polyline.decode(geometria);
+        const latLngs = coords.map(coord => L.latLng(coord[0], coord[1]));
+        
+        // Crear nueva capa de ruta
+        rutaLayer = L.polyline(latLngs, {
+          color: '#d62828',
+          weight: 6,
+          opacity: 0.8,
+          lineJoin: 'round'
+        }).addTo(map);
+        
+        // Ajustar vista para mostrar toda la ruta
+        map.fitBounds(rutaLayer.getBounds());
+      } catch (error) {
+        showNotification('Error', 'No se pudo dibujar la ruta', 'error');
+      }
+    }
+    
+    // Obtener información del pedido desde Supabase
+    async function obtenerPedido(id) {
+      try {
+        // Consultar pedido en Supabase
+        const { data, error } = await supabase
+          .from('pedidos')
+          .select(`
+            id,
+            estado,
+            distancia,
+            costo_entrega,
+            total,
+            ubicacion_entrega,
+            ruta_geometria,
+            mensajero:mensajeros (id, nombre, apellidos, telefono, vehiculo)
+          `)
+          .eq('id', id)
+          .single();
+        
+        if (error) throw error;
+        if (!data) throw new Error('Pedido no encontrado');
+        
+        return data;
+      } catch (error) {
+        console.error('Error obteniendo pedido:', error);
+        throw error;
+      }
+    }
+    
+    // Obtener información del mensajero
+    async function obtenerMensajero(id) {
+      try {
+        // Consultar mensajero en Supabase
+        const { data, error } = await supabase
+          .from('mensajeros')
+          .select('id, nombre, apellidos, telefono, vehiculo')
+          .eq('id', id)
+          .single();
+        
+        if (error) throw error;
+        return data;
+      } catch (error) {
+        console.error('Error obteniendo mensajero:', error);
+        return null;
+      }
+    }
+    
+    // Conectar al servidor de seguimiento
+    function connectToSocket(pedidoId) {
+      socket = io(config.socketServer, {
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+      });
+      
+      socket.on('connect', () => {
+        console.log('Conectado al servidor de seguimiento');
+        socket.emit('unirse_pedido', pedidoId);
+      });
+      
+      // Recibir actualizaciones de ubicación
+      socket.on('actualizacion_ubicacion', (data) => {
+        if (data.pedidoId === pedidoId) {
+          actualizarUbicacionMensajero(data.lat, data.lng);
+        }
+      });
+      
+      // Recibir actualizaciones de estado
+      socket.on('actualizacion_estado', (data) => {
+        if (data.pedidoId === pedidoId) {
+          actualizarEstadoPedido(data.estado);
+        }
+      });
+      
+      socket.on('disconnect', (reason) => {
+        console.log('Desconectado del servidor:', reason);
+      });
+    }
+    
+    // Actualizar estado del pedido en la UI
+    function actualizarEstadoPedido(estado) {
+      const estados = ['en proceso', 'asignado', 'en camino', 'entregado'];
+      const estadoIndex = estados.indexOf(estado);
+      const progressPercentage = estadoIndex >= 0 ? (estadoIndex / (estados.length - 1)) * 100 : 0;
+      
+      // Actualizar ancho de la barra de progreso
+      document.getElementById('progress').style.width = `${progressPercentage}%`;
+      
+      // Actualizar clases de los pasos
+      estados.forEach((est, index) => {
+        const stepId = `step-${est.replace(' ', '-')}`;
+        const step = document.getElementById(stepId);
+        if (step) {
+          step.classList.remove('completed', 'active');
+          
+          if (index < estadoIndex) {
+            step.classList.add('completed');
+          }
+          if (index === estadoIndex) {
+            step.classList.add('active');
+          }
+        }
+      });
+      
+      // Actualizar texto de estado
+      document.getElementById('estado-pedido').textContent = estado;
+    }
+    
+    // Mostrar información del pedido
+    function mostrarInfoPedido(pedidoData) {
+      // Actualizar elementos de la UI
+      document.getElementById('pedido-id').textContent = pedidoData.id;
+      document.getElementById('distancia-pedido').textContent = `${pedidoData.distancia} km`;
+      document.getElementById('costo-entrega').textContent = `${pedidoData.costo_entrega} CUP`;
+      document.getElementById('total-pedido').textContent = `${pedidoData.total} CUP`;
+      
+      // Actualizar estado
+      actualizarEstadoPedido(pedidoData.estado);
+      
+      // Mostrar ubicación de entrega si está disponible
+      if (pedidoData.ubicacion_entrega) {
+        mostrarUbicacionEntrega(pedidoData.ubicacion_entrega);
+      }
+      
+      // Dibujar ruta si está disponible
+      if (pedidoData.ruta_geometria) {
+        dibujarRuta(pedidoData.ruta_geometria);
+      }
+    }
+    
+    // Mostrar información del mensajero
+    function mostrarInfoMensajero(mensajeroData) {
+      if (!mensajeroData) return;
+      
+      // Actualizar elementos de la UI
+      document.getElementById('mensajero-nombre').textContent = 
+        `${mensajeroData.nombre} ${mensajeroData.apellidos}`;
+      document.getElementById('mensajero-telefono').textContent = mensajeroData.telefono;
+      
+      // Crear avatar con iniciales
+      const avatar = document.getElementById('mensajero-avatar');
+      const initials = `${mensajeroData.nombre.charAt(0)}${mensajeroData.apellidos.charAt(0)}`;
+      avatar.textContent = initials;
+    }
+    
+    // Inicializar seguimiento
+    async function initSeguimiento() {
+      if (!pedidoId) {
+        mostrarError('Falta ID de pedido en la URL');
+        return;
+      }
+      
+      try {
+        // Obtener información del pedido
+        const pedidoData = await obtenerPedido(pedidoId);
+        pedido = pedidoData;
+        
+        // Obtener información del mensajero si está asignado
+        if (pedidoData.mensajero) {
+          mensajero = pedidoData.mensajero;
+        }
+        
+        // Inicializar mapa con ubicación de entrega
+        initMap(pedidoData.ubicacion_entrega);
+        
+        // Conectar al WebSocket
+        connectToSocket(pedidoId);
+        
+        // Mostrar información del pedido y mensajero
+        mostrarInfoPedido(pedidoData);
+        if (mensajero) mostrarInfoMensajero(mensajero);
+        
+        // Mostrar contenido y ocultar carga
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('pedido-content').style.display = 'block';
+        
+      } catch (error) {
+        console.error('Error inicializando seguimiento:', error);
+        mostrarError(error.message || 'No se pudo cargar la información del pedido');
+      }
+    }
+    
+    // Mostrar mensaje de error
+    function mostrarError(mensaje) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error-message').style.display = 'block';
+      document.getElementById('error-text').textContent = mensaje;
+    }
+    
+    // Recargar la página
+    function recargarPagina() {
+      window.location.reload();
+    }
+    
+    // Inicializar cuando el documento esté listo
+    document.addEventListener('DOMContentLoaded', () => {
+      // Iniciar seguimiento
+      initSeguimiento();
+      
+      // Configurar botón de recarga
+      document.getElementById('reload-button').addEventListener('click', recargarPagina);
+      
+      // Añadir animación para el spinner
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .spinner {
+          animation: spin 1s linear infinite;
+        }
+      `;
+      document.head.appendChild(style);
+    });
+  </script>
+</body>
+</html>
