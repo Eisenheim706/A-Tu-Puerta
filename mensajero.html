@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel de Mensajeros - A TU PUERTA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="https://unpkg.com/@mapbox/polyline@1.1.1"></script>
+  <style>
+    :root {
+      --primary: #2196f3;
+      --success: #4caf50;
+      --warning: #ff9800;
+      --danger: #f44336;
+      --dark: #333;
+      --light: #f5f5f5;
+      --sombra: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    body {
+      background-color: #f8f9fa;
+      color: #333;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    
+    header {
+      background: linear-gradient(135deg, rgba(33, 150, 243, 0.9), rgba(13, 139, 242, 0.9)), 
+                  url('img/icono_logo.png') center/contain no-repeat;
+      color: white;
+      padding: 20px 0;
+      text-align: center;
+      position: relative;
+      height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      box-shadow: var(--sombra);
+    }
+    
+    header::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.3);
+    }
+    
+    header .contenedor {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+      position: relative;
+      z-index: 2;
+    }
+    
+    header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    
+    header p {
+      font-size: 1.2rem;
+      opacity: 0.9;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+    
+    .contenedor {
+      max-width: 1200px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.7);
+    }
+    
+    .modal-content {
+      background-color: #fefefe;
+      margin: 10% auto;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 600px;
+      width: 80%;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .close:hover {
+      color: black;
+    }
+    
+    .pedido-info-card {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    /* Botones */
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .btn {
+      flex: 1;
+      min-width: 150px;
+      padding: 10px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    
+    .btn-secondary {
+      background: #6c757d;
+    }
+    
+    .btn:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+    }
+    
+    /* Botón flotante para ubicación manual */
+    .btn-flotante {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      cursor: pointer;
+    }
+    
+    .form-group {
+      margin-bottom: 15px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+
+    /* Modal para tipo de ubicación */
+    .modal-tipo-ubicacion .modal-content {
+      max-width: 400px;
+      text-align: center;
+    }
+    
+    .modal-tipo-ubicacion .btn-group {
+      justify-content: center;
+    }
+    
+    /* Modal para confirmar entrega */
+    .modal-confirmar-entrega .modal-content {
+      max-width: 500px;
+    }
+    
+    .modal-confirmar-entrega .btn-group {
+      margin-top: 20px;
+    }
+    
+    /* Notificaciones */
+    .notification-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2000;
+      max-width: 350px;
+    }
+    
+    .notification {
+      background: white;
+      border-radius: 8px;
+      padding: 15px 20px;
+      margin-bottom: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      transform: translateX(400px);
+      animation: slideIn 0.3s forwards, fadeOut 0.3s 4s forwards;
+    }
+    
+    .notification-icon {
+      font-size: 24px;
+      min-width: 30px;
+    }
+    
+    .notification-info .notification-icon {
+      color: var(--primary);
+    }
+    
+    .notification-success .notification-icon {
+      color: var(--success);
+    }
+    
+    .notification-warning .notification-icon {
+      color: var(--warning);
+    }
+    
+    .notification-error .notification-icon {
+      color: var(--danger);
+    }
+    
+    .notification-content {
+      flex: 1;
+    }
+    
+    .notification-title {
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    
+    .notification-message {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    @keyframes slideIn {
+      to { transform: translateX(0); }
+    }
+    
+    @keyframes fadeOut {
+      to { opacity: 0; transform: translateX(400px); }
+    }
+
+    /* Barra de progreso */
+    .progress-container {
+      background: #fff;
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .progress-bar {
+      display: flex;
+      justify-content: space-between;
+      position: relative;
+      margin-top: 20px;
+      counter-reset: step;
+    }
+
+    .progress-bar::before {
+      content: "";
+      position: absolute;
+      top: 15px;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: #e0e0e0;
+      z-index: 1;
+    }
+
+    .progress {
+      position: absolute;
+      top: 15px;
+      left: 0;
+      height: 4px;
+      background: #2196F3;
+      z-index: 2;
+      transition: width 0.3s ease;
+    }
+
+    .progress-step {
+      position: relative;
+      z-index: 3;
+      text-align: center;
+      width: 100px;
+    }
+
+    .progress-step::before {
+      counter-increment: step;
+      content: counter(step);
+      width: 30px;
+      height: 30px;
+      background: #e0e0e0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 10px;
+      position: relative;
+      z-index: 2;
+      font-weight: bold;
+    }
+
+    .progress-step.completed::before {
+      background: #4CAF50;
+      color: white;
+      content: "✓";
+    }
+
+    .progress-step.active::before {
+      background: #2196F3;
+      color: white;
+    }
+
+    .progress-title {
+      font-size: 14px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="notification-container" id="notification-container"></div>
+  
+  <header>
+    <div class="contenedor">
+      <h1>A TU PUERTA</h1>
+      <p>Panel de Mensajeros</p>
+    </div>
+  </header>
+
+  <div class="contenedor">
+    <div id="login-container" class="login-container">
+      <h2>Iniciar sesión</h2>
+      <div class="form-group">
+        <label for="telefono">Número de teléfono</label>
+        <input type="tel" id="telefono" placeholder="Ej: 5355551234">
+      </div>
+      <div class="form-group">
+        <label for="codigo">Código de verificación</label>
+        <input type="text" id="codigo" placeholder="Código recibido">
+      </div>
+      <button id="btn-solicitar-codigo" class="btn btn-secondary">Solicitar código</button>
+      <button id="btn-login" class="btn">Iniciar sesión</button>
+      <div id="login-error" style="color: red; margin-top: 15px; display: none;"></div>
+    </div>
+
+    <div id="panel-mensajero" style="display: none;">
+      <h2>Pedidos disponibles</h2>
+      <div id="map" style="height: 500px; border-radius: 15px; margin-bottom: 25px; box-shadow: var(--sombra);"></div>
+      
+      <div id="seguimiento-container" style="display: none;">
+        <h2>Seguimiento de pedido: <span id="pedido-id"></span></h2>
+        <div id="map-seguimiento" style="height: 500px; border-radius: 15px; margin-bottom: 25px; box-shadow: var(--sombra);"></div>
+        
+        <!-- Barra de progreso horizontal -->
+        <div class="progress-container">
+          <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+            <div class="progress-step" id="step-disponible">
+              <div class="progress-title">Disponible</div>
+            </div>
+            <div class="progress-step" id="step-asignado">
+              <div class="progress-title">Asignado</div>
+            </div>
+            <div class="progress-step" id="step-proceso">
+              <div class="progress-title">En proceso</div>
+            </div>
+            <div class="progress-step" id="step-camino">
+              <div class="progress-title">En camino</div>
+            </div>
+            <div class="progress-step" id="step-entregado">
+              <div class="progress-title">Entregado</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="pedido-info-card">
+          <h3>Detalles del pedido</h3>
+          <p><strong>Ubicación destino:</strong> <span id="ubicacion-destino"></span></p>
+          <p><strong>Costo mensajería:</strong> <span id="costo-mensajeria"></span> CUP</p>
+          <p><strong>Estado:</strong> <span id="estado-pedido">Asignado</span></p>
+          
+          <!-- Grupo de botones modificados -->
+          <div class="btn-group">
+            <button id="btn-iniciar-entrega" class="btn" style="display: none;">Iniciar Entrega</button>
+            <button id="btn-entrega-camino" class="btn" style="display: none;">Entrega en Camino</button>
+            <button id="btn-finalizar-entrega" class="btn" style="display: none;">Finalizar Entrega</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Botón flotante para ubicación manual -->
+  <div id="btn-ubicacion-manual" class="btn-flotante" style="display: none;">
+    <i class="fas fa-map-marker-alt"></i>
+  </div>
+
+  <!-- Modal de detalles del pedido -->
+  <div id="modal-detalles" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="document.getElementById('modal-detalles').style.display = 'none'">&times;</span>
+      <h2>Detalles del Pedido</h2>
+      <div id="detalles-pedido"></div>
+      <button onclick="aceptarPedido()" class="btn">Aceptar Pedido</button>
+    </div>
+  </div>
+
+  <!-- Modal para tipo de ubicación -->
+  <div id="modal-tipo-ubicacion" class="modal modal-tipo-ubicacion">
+    <div class="modal-content">
+      <span class="close" onclick="document.getElementById('modal-tipo-ubicacion').style.display = 'none'">&times;</span>
+      <h2>Cambiar tipo de ubicación</h2>
+      <p id="modal-tipo-ubicacion-texto"></p>
+      <div class="btn-group">
+        <button id="btn-cambiar-tipo-ubicacion" class="btn">Cambiar</button>
+        <button onclick="document.getElementById('modal-tipo-ubicacion').style.display = 'none'" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para confirmar entrega -->
+  <div id="modal-confirmar-entrega" class="modal modal-confirmar-entrega">
+    <div class="modal-content">
+      <span class="close" onclick="document.getElementById('modal-confirmar-entrega').style.display = 'none'">&times;</span>
+      <h2>Confirmar Entrega</h2>
+      <p>¿Está seguro de que concluyó la entrega? De ser así asume la responsabilidad de los pagos.</p>
+      <p><strong>Advertencia:</strong> Al confirmar, el pedido se marcará como entregado y se guardará en el historial.</p>
+      <div class="btn-group">
+        <button id="btn-confirmar-entrega" class="btn btn-acento">Confirmar Entrega</button>
+        <button onclick="document.getElementById('modal-confirmar-entrega').style.display = 'none'" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="contenedor">
+      <p>© 2025 A TU PUERTA - Todos los derechos reservados</p>
+    </div>
+  </footer>
+
+  <script>
+    // Configuración
+    const config = {
+      backendUrl: "https://backend-service-6ang.onrender.com/api",
+      socketServer: "https://websocket-service-i32d.onrender.com",
+      puntoVenta: { lat: 22.401355, lng: -79.970718 }
+    };
+
+    // Variables globales
+    let map = null;
+    let mapSeguimiento = null;
+    let pedidoActivo = null;
+    let pedidoSeleccionado = null;
+    let socket = null;
+    let mensajeroMarker = null;
+    let trackingInterval = null;
+    let telefonoMensajero = null;
+    let markers = [];
+    let rutaLayer = null;
+    let rutaPuntoVentaLayer = null;
+    let modoUbicacionManual = false;
+    let marcadorManual = null;
+
+    // Elementos del DOM para los nuevos botones
+    const btnIniciarEntrega = document.getElementById('btn-iniciar-entrega');
+    const btnEntregaCamino = document.getElementById('btn-entrega-camino');
+    const btnFinalizarEntrega = document.getElementById('btn-finalizar-entrega');
+    const btnUbicacionManual = document.getElementById('btn-ubicacion-manual');
+    const btnConfirmarEntrega = document.getElementById('btn-confirmar-entrega');
+
+    // Función para agregar logs (ya no se muestra en la interfaz)
+    function addLog(message) {
+      console.log(`[${new Date().toLocaleTimeString()}] ${message}`);
+    }
+
+    // Función mejorada para manejar errores de fetch
+    async function handleFetchResponse(response) {
+      if (!response.ok) {
+        let errorMsg = `Error ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch {
+          try {
+            errorMsg = await response.text();
+          } catch {}
+        }
+        throw new Error(errorMsg);
+      }
+      return response.json();
+    }
+
+    // Función para mostrar notificaciones
+    function showNotification(title, message, type = 'info') {
+      const container = document.getElementById('notification-container');
+      if (!container) return;
+      
+      const notification = document.createElement('div');
+      notification.className = `notification notification-${type}`;
+      
+      let icon = 'fa-info-circle';
+      if (type === 'success') icon = 'fa-check-circle';
+      if (type === 'warning') icon = 'fa-exclamation-triangle';
+      if (type === 'error') icon = 'fa-exclamation-circle';
+      
+      notification.innerHTML = `
+        <div class="notification-icon">
+          <i class="fas ${icon}"></i>
+        </div>
+        <div class="notification-content">
+          <div class="notification-title">${title}</div>
+          <div class="notification-message">${message}</div>
+        </div>
+      `;
+      
+      container.appendChild(notification);
+      
+      // Eliminar notificación después de animación
+      setTimeout(() => {
+        notification.remove();
+      }, 4500);
+    }
+
+    // Inicializar mapa principal
+    function initMap() {
+      if (map) map.remove();
+      map = L.map('map').setView([config.puntoVenta.lat, config.puntoVenta.lng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(map);
+
+      // Marcador de punto de venta
+      L.marker([config.puntoVenta.lat, config.puntoVenta.lng], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(map).bindPopup('Punto de venta');
+    }
+
+    // Inicializar mapa de seguimiento
+    async function initSeguimientoMap() {
+      if (!pedidoActivo) return;
+      
+      if (mapSeguimiento) mapSeguimiento.remove();
+      mapSeguimiento = L.map('map-seguimiento').setView([
+        config.puntoVenta.lat, 
+        config.puntoVenta.lng
+      ], 13);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapSeguimiento);
+      
+      // Marcador de punto de venta
+      L.marker([
+        config.puntoVenta.lat,
+        config.puntoVenta.lng
+      ], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(mapSeguimiento).bindPopup('Punto de venta');
+
+      // Marcador de destino
+      L.marker([
+        pedidoActivo.ubicacionEntrega.lat,
+        pedidoActivo.ubicacionEntrega.lng
+      ], {
+        icon: L.icon({
+          iconUrl: 'img/icono_logo.png',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
+        })
+      }).addTo(mapSeguimiento).bindPopup('Destino de entrega');
+    }
+
+    // Actualizar mapa de seguimiento y verificar proximidades
+    function actualizarMapaSeguimiento(lat, lng) {
+      if (!mapSeguimiento) return;
+      
+      if (modoUbicacionManual && marcadorManual) {
+        // Modo manual: actualizar marcador existente
+        marcadorManual.setLatLng([lat, lng]);
+      } else {
+        // Modo automático: crear o actualizar marcador
+        if (mensajeroMarker) {
+          mensajeroMarker.setLatLng([lat, lng]);
+        } else {
+          mensajeroMarker = L.marker([lat, lng], {
+            icon: L.icon({
+              iconUrl: 'img/icono_mensajero.png',
+              iconSize: [32, 32],
+              iconAnchor: [16, 32]
+            })
+          }).addTo(mapSeguimiento).bindPopup('Mensajero');
+          
+          // Evento para cambiar tipo de ubicación al hacer clic en el marcador
+          mensajeroMarker.on('click', function() {
+            mostrarModalTipoUbicacion();
+          });
+        }
+      }
+      
+      mapSeguimiento.setView([lat, lng], 15);
+      
+      // Verificar proximidades siempre que se actualice la ubicación
+      verificarProximidades(lat, lng);
+    }
+
+    // Verificar proximidades a puntos clave
+    function verificarProximidades(lat, lng) {
+      if (!pedidoActivo) return;
+      
+      // Verificar si está cerca del punto de venta (30 metros)
+      const distanciaVenta = Math.sqrt(
+        Math.pow(lat - config.puntoVenta.lat, 2) + 
+        Math.pow(lng - config.puntoVenta.lng, 2)
+      ) * 111000; // Convertir grados a metros
+      
+      // Mostrar "Entrega en Camino" si está cerca de la tienda y el estado es 'en proceso'
+      if (distanciaVenta <= 30 && btnEntregaCamino.style.display === 'none' && 
+          pedidoActivo.estado === 'en proceso') {
+        btnEntregaCamino.style.display = 'block';
+        addLog('¡Has llegado al punto de venta!');
+      }
+      
+      // Verificar si está cerca del punto de entrega (30 metros)
+      const distanciaEntrega = Math.sqrt(
+        Math.pow(lat - pedidoActivo.ubicacionEntrega.lat, 2) + 
+        Math.pow(lng - pedidoActivo.ubicacionEntrega.lng, 2)
+      ) * 111000;
+      
+      if (distanciaEntrega <= 30 && pedidoActivo.estado === 'en camino') {
+        btnFinalizarEntrega.style.display = 'block';
+        addLog('¡Has llegado al destino!');
+      }
+    }
+
+    // Obtener pedidos disponibles
+    async function obtenerPedidosDisponibles() {
+      try {
+        const response = await fetch(`${config.backendUrl}/pedidos/disponibles`);
+        return await handleFetchResponse(response);
+      } catch (error) {
+        addLog(`Error obteniendo pedidos: ${error.message}`);
+        return [];
+      }
+    }
+
+    // Mostrar pedidos disponibles en el mapa
+    async function mostrarPedidosDisponibles() {
+      try {
+        const pedidos = await obtenerPedidosDisponibles();
+        
+        markers.forEach(marker => map.removeLayer(marker));
+        markers = [];
+        
+        if (pedidos.length === 0) {
+          addLog('No hay pedidos disponibles');
+          return;
+        }
+        
+        // Crear un grupo para ajustar el mapa
+        const markerGroup = [];
+        
+        pedidos.forEach(pedido => {
+          const marker = L.marker([
+            pedido.ubicacionEntrega.lat,
+            pedido.ubicacionEntrega.lng
+          ], {
+            icon: L.icon({
+              iconUrl: 'img/icono_entrega.png',
+              iconSize: [24, 24],
+              iconAnchor: [12, 24]
+            })
+          }).addTo(map).bindPopup(`Pedido #${pedido.id.slice(-6)}`);
+          
+          // Al hacer clic en el marcador, mostrar el modal
+          marker.on('click', () => {
+            mostrarDetallesPedido(pedido);
+          });
+          
+          markers.push(marker);
+          markerGroup.push(marker.getLatLng());
+        });
+        
+        // Ajustar el mapa para que muestre todos los marcadores
+        if (markerGroup.length > 0) {
+          const group = new L.featureGroup(markers);
+          map.fitBounds(group.getBounds().pad(0.2));
+        }
+        
+        addLog(`Mostrando ${pedidos.length} pedidos disponibles`);
+        
+        // Programar próxima actualización en 30 segundos
+        setTimeout(mostrarPedidosDisponibles, 30000);
+        
+      } catch (error) {
+        addLog(`Error: ${error.message}`);
+        // Reintentar en 10 segundos si hay error
+        setTimeout(mostrarPedidosDisponibles, 10000);
+      }
+    }
+
+    // Función para mostrar detalles del pedido en modal
+    function mostrarDetallesPedido(pedido) {
+      const modal = document.getElementById('modal-detalles');
+      const detalles = document.getElementById('detalles-pedido');
+      
+      // Crear lista de productos
+      const productosHTML = pedido.productos.map(p => 
+        `<li>${p.nombre} x ${p.cantidad} - ${p.precio * p.cantidad} CUP</li>`
+      ).join('');
+      
+      detalles.innerHTML = `
+        <h3>Pedido #${pedido.id.slice(-6)}</h3>
+        <p><strong>Ubicación entrega:</strong> ${pedido.ubicacionEntrega.lat.toFixed(6)}, ${pedido.ubicacionEntrega.lng.toFixed(6)}</p>
+        <p><strong>Distancia:</strong> ${pedido.distanciaCarreteraKm || '?'} km</p>
+        <p><strong>Costo mensajería:</strong> ${pedido.precioDelivery || 'Negociar'} CUP</p>
+        <h4>Productos:</h4>
+        <ul>${productosHTML}</ul>
+      `;
+      
+      modal.style.display = 'block';
+      pedidoSeleccionado = pedido;
+    }
+
+    // Función para aceptar pedido
+    async function aceptarPedido() {
+      if (!pedidoSeleccionado) return;
+      
+      try {
+        const response = await fetch(`${config.backendUrl}/pedidos/asignar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pedidoId: pedidoSeleccionado.id,
+            mensajeroId: telefonoMensajero
+          })
+        });
+        
+        await handleFetchResponse(response);
+        
+        document.getElementById('modal-detalles').style.display = 'none';
+        pedidoActivo = pedidoSeleccionado;
+        pedidoSeleccionado = null;
+        
+        // Mostrar sección de seguimiento
+        document.getElementById('seguimiento-container').style.display = 'block';
+        document.getElementById('pedido-id').textContent = pedidoActivo.id.slice(-6);
+        document.getElementById('ubicacion-destino').textContent = 
+          `${pedidoActivo.ubicacionEntrega.lat.toFixed(6)}, ${pedidoActivo.ubicacionEntrega.lng.toFixed(6)}`;
+        document.getElementById('costo-mensajeria').textContent = 
+          pedidoActivo.precioDelivery || 'Negociar';
+        
+        // Inicializar mapa de seguimiento con la ruta
+        initSeguimientoMap();
+        
+        // Mostrar botón "Iniciar entrega"
+        btnIniciarEntrega.style.display = 'block';
+        
+        // Mostrar botón flotante para ubicación manual
+        btnUbicacionManual.style.display = 'block';
+        
+        // Actualizar estado automáticamente
+        actualizarBarraProgreso('asignado');
+        
+        addLog(`Pedido #${pedidoActivo.id.slice(-6)} aceptado`);
+      } catch (error) {
+        addLog(`Error aceptando pedido: ${error.message}`);
+        alert(`Error: ${error.message}`);
+      }
+    }
+
+    // Función para actualizar la barra de progreso
+    function actualizarBarraProgreso(estado) {
+      const estados = ['disponible', 'asignado', 'en proceso', 'en camino', 'entregado'];
+      const estadoIndex = estados.indexOf(estado);
+      const progressPercentage = estadoIndex >= 0 ? (estadoIndex / (estados.length - 1)) * 100 : 0;
+      
+      document.getElementById('progress').style.width = `${progressPercentage}%`;
+      document.getElementById('estado-pedido').textContent = estado;
+      
+      estados.forEach((est, index) => {
+        const stepId = `step-${est.replace(' ', '-')}`;
+        const step = document.getElementById(stepId);
+        if (step) {
+          step.classList.remove('completed', 'active');
+          if (index < estadoIndex) {
+            step.classList.add('completed');
+          } else if (index === estadoIndex) {
+            step.classList.add('active');
+          }
+        }
+      });
+    }
+
+    // Función para actualizar el estado del pedido
+    async function actualizarEstadoPedido(estado) {
+      try {
+        const response = await fetch(`${config.backendUrl}/pedidos/actualizar-estado`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            pedidoId: pedidoActivo.id,
+            estado: estado
+          })
+        });
+        
+        await handleFetchResponse(response);
+        addLog(`Estado actualizado a: ${estado}`);
+        
+        // Actualizar barra de progreso
+        actualizarBarraProgreso(estado);
+        return true;
+      } catch (error) {
+        addLog(`Error actualizando estado: ${error.message}`);
+        return false;
+      }
+    }
+
+    // Iniciar seguimiento de ubicación
+    function iniciarSeguimientoUbicacion() {
+      if (trackingInterval) clearInterval(trackingInterval);
+      
+      trackingInterval = setInterval(() => {
+        if (navigator.geolocation && !modoUbicacionManual) {
+          navigator.geolocation.getCurrentPosition(
+            position => {
+              const lat = position.coords.latitude;
+              const lng = position.coords.longitude;
+              
+              actualizarMapaSeguimiento(lat, lng);
+              
+              if (socket && socket.connected) {
+                socket.emit('actualizar_ubicacion', {
+                  pedidoId: pedidoActivo.id,
+                  lat,
+                  lng
+                });
+                addLog(`Ubicación actualizada: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+              }
+            },
+            error => {
+              addLog(`Error de geolocalización: ${error.message}`);
+            }
+          );
+        }
+      }, 5000);
+    }
+
+    // Función para dibujar ruta al punto de venta
+    async function dibujarRutaAlPuntoVenta(origen, destino) {
+      try {
+        const response = await fetch(`${config.backendUrl}/ruta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origen: origen,
+            destino: destino
+          })
+        });
+        
+        const data = await response.json();
+        const coords = polyline.decode(data.geometria);
+        const latLngs = coords.map(coord => L.latLng(coord[0], coord[1]));
+        
+        if (rutaPuntoVentaLayer) {
+          mapSeguimiento.removeLayer(rutaPuntoVentaLayer);
+        }
+        
+        rutaPuntoVentaLayer = L.polyline(latLngs, {
+          color: '#4caf50',
+          weight: 6,
+          opacity: 0.8,
+          lineJoin: 'round'
+        }).addTo(mapSeguimiento);
+        
+        const bounds = L.latLngBounds(latLngs);
+        mapSeguimiento.fitBounds(bounds);
+        
+      } catch (error) {
+        addLog(`Error dibujando ruta: ${error.message}`);
+      }
+    }
+
+    // Función para dibujar ruta al cliente
+    async function dibujarRutaAlCliente(origen, destino) {
+      try {
+        const response = await fetch(`${config.backendUrl}/ruta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origen: origen,
+            destino: destino
+          })
+        });
+        
+        const data = await response.json();
+        const coords = polyline.decode(data.geometria);
+        const latLngs = coords.map(coord => L.latLng(coord[0], coord[1]));
+        
+        if (rutaLayer) {
+          mapSeguimiento.removeLayer(rutaLayer);
+        }
+        
+        rutaLayer = L.polyline(latLngs, {
+          color: '#d62828',
+          weight: 6,
+          opacity: 0.8,
+          lineJoin: 'round'
+        }).addTo(mapSeguimiento);
+        
+        const bounds = L.latLngBounds(latLngs);
+        mapSeguimiento.fitBounds(bounds);
+        
+      } catch (error) {
+        addLog(`Error dibujando ruta: ${error.message}`);
+      }
+    }
+
+    // Función para mostrar modal de tipo de ubicación
+    function mostrarModalTipoUbicacion() {
+      const modal = document.getElementById('modal-tipo-ubicacion');
+      const texto = document.getElementById('modal-tipo-ubicacion-texto');
+      const btnCambiar = document.getElementById('btn-cambiar-tipo-ubicacion');
+      
+      if (modoUbicacionManual) {
+        texto.textContent = '¿Volver a ubicación automática?';
+        btnCambiar.textContent = 'Automática';
+        btnCambiar.onclick = function() {
+          cambiarTipoUbicacion(false);
+          modal.style.display = 'none';
+        };
+      } else {
+        texto.textContent = '¿Cambiar a ubicación manual? En este modo, podrás establecer tu ubicación haciendo clic en el mapa.';
+        btnCambiar.textContent = 'Manual';
+        btnCambiar.onclick = function() {
+          cambiarTipoUbicacion(true);
+          modal.style.display = 'none';
+        };
+      }
+      
+      modal.style.display = 'block';
+    }
+
+    // Función para cambiar el tipo de ubicación
+    function cambiarTipoUbicacion(manual) {
+      modoUbicacionManual = manual;
+      
+      if (modoUbicacionManual) {
+        // Detener seguimiento automático
+        if (trackingInterval) {
+          clearInterval(trackingInterval);
+          trackingInterval = null;
+        }
+        
+        // Crear marcador manual si no existe
+        if (!marcadorManual) {
+          const currentPos = mensajeroMarker ? mensajeroMarker.getLatLng() : config.puntoVenta;
+          marcadorManual = L.marker([currentPos.lat, currentPos.lng], {
+            icon: L.icon({
+              iconUrl: 'img/icono_mensajero.png',
+              iconSize: [32, 32],
+              iconAnchor: [16, 32]
+            }),
+            draggable: true
+          }).addTo(mapSeguimiento);
+          
+          // Evento para arrastrar marcador
+          marcadorManual.on('dragend', function(event) {
+            const marker = event.target;
+            const position = marker.getLatLng();
+            
+            // Actualizar ubicación
+            actualizarMapaSeguimiento(position.lat, position.lng);
+            
+            // Enviar al servidor
+            if (socket && socket.connected) {
+              socket.emit('actualizar_ubicacion', {
+                pedidoId: pedidoActivo.id,
+                lat: position.lat,
+                lng: position.lng
+              });
+              addLog(`Ubicación manual actualizada: ${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`);
+            }
+          });
+          
+          // Evento para cambiar tipo de ubicación
+          marcadorManual.on('click', function() {
+            mostrarModalTipoUbicacion();
+          });
+        }
+        
+        // Eliminar marcador automático si existe
+        if (mensajeroMarker) {
+          mapSeguimiento.removeLayer(mensajeroMarker);
+          mensajeroMarker = null;
+        }
+        
+        // Evento para hacer clic en el mapa
+        mapSeguimiento.on('click', function(e) {
+          const lat = e.latlng.lat;
+          const lng = e.latlng.lng;
+          
+          // Actualizar ubicación del marcador manual
+          marcadorManual.setLatLng([lat, lng]);
+          
+          // Enviar al servidor
+          if (socket && socket.connected) {
+            socket.emit('actualizar_ubicacion', {
+              pedidoId: pedidoActivo.id,
+              lat,
+              lng
+            });
+            addLog(`Ubicación manual actualizada: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          }
+        });
+        
+        addLog('Modo manual activado: Haz clic en el mapa para establecer tu ubicación');
+      } else {
+        // Eliminar marcador manual si existe
+        if (marcadorManual) {
+          mapSeguimiento.removeLayer(marcadorManual);
+          marcadorManual = null;
+        }
+        
+        // Eliminar evento de clic del mapa
+        mapSeguimiento.off('click');
+        
+        // Reanudar seguimiento automático
+        iniciarSeguimientoUbicacion();
+        
+        addLog('Modo automático activado');
+      }
+    }
+
+    // Inicializar WebSocket
+    function initSocket() {
+      socket = io(config.socketServer, {
+        transports: ['websocket'],
+        reconnection: true
+      });
+
+      socket.on('connect', () => {
+        addLog('Conectado al servidor de seguimiento');
+      });
+
+      socket.on('disconnect', () => {
+        addLog('Desconectado del servidor');
+      });
+
+      // Escuchar actualización de estado
+      socket.on('actualizacion_estado', (data) => {
+        if (pedidoActivo && data.pedidoId === pedidoActivo.id) {
+          actualizarBarraProgreso(data.estado);
+        }
+      });
+    }
+
+    // Event listeners para los botones
+    btnIniciarEntrega.addEventListener('click', async function() {
+      if (confirm('¿Estás seguro de que estás en el punto de venta y has recogido el pedido?')) {
+        const exito = await actualizarEstadoPedido('en proceso');
+        if (exito) {
+          this.style.display = 'none';
+          
+          // Obtener ubicación actual para trazar ruta al punto de venta
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              async position => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                
+                // Dibujar ruta desde la ubicación actual al punto de venta
+                await dibujarRutaAlPuntoVenta(
+                  { lat, lng },
+                  config.puntoVenta
+                );
+                
+                // Iniciar seguimiento automático
+                iniciarSeguimientoUbicacion();
+              },
+              error => {
+                addLog(`Error obteniendo ubicación: ${error.message}`);
+              }
+            );
+          }
+        }
+      }
+    });
+    
+    btnEntregaCamino.addEventListener('click', async function() {
+      if (confirm('¿Estás seguro de que has salido del punto de venta y estás en camino al destino?')) {
+        const exito = await actualizarEstadoPedido('en camino');
+        if (exito) {
+          this.style.display = 'none';
+          
+          // Dibujar ruta desde el punto de venta al cliente
+          await dibujarRutaAlCliente(
+            config.puntoVenta,
+            pedidoActivo.ubicacionEntrega
+          );
+        }
+      }
+    });
+    
+    btnFinalizarEntrega.addEventListener('click', function() {
+      // Mostrar modal de confirmación
+      document.getElementById('modal-confirmar-entrega').style.display = 'block';
+    });
+    
+    // Confirmar entrega desde el modal
+    btnConfirmarEntrega.addEventListener('click', async function() {
+      if (trackingInterval) clearInterval(trackingInterval);
+      
+      try {
+        // Mostrar feedback de carga
+        const originalText = this.innerHTML;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+        this.disabled = true;
+        
+        // Primero actualizar estado a 'entregado'
+        await actualizarEstadoPedido('entregado');
+        
+        // Luego llamar al endpoint de entregado
+        const response = await fetch(`${config.backendUrl}/pedidos/entregado`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pedidoId: pedidoActivo.id })
+        });
+        
+        await handleFetchResponse(response);
+        
+        showNotification('¡Éxito!', 'Pedido guardado en historial', 'success');
+        addLog(`Pedido #${pedidoActivo.id.slice(-6)} entregado`);
+        
+        // Cerrar modal
+        document.getElementById('modal-confirmar-entrega').style.display = 'none';
+        
+        // Restaurar el botón después de un breve retraso
+        setTimeout(() => {
+          this.innerHTML = originalText;
+          this.disabled = false;
+          alert('¡Entrega finalizada con éxito!');
+          
+          document.getElementById('seguimiento-container').style.display = 'none';
+          pedidoActivo = null;
+          mensajeroMarker = null;
+          marcadorManual = null;
+          btnUbicacionManual.style.display = 'none';
+          mostrarPedidosDisponibles();
+        }, 2000);
+        
+      } catch (error) {
+        showNotification('Error', 'No se pudo guardar el historial', 'error');
+        addLog(`Error finalizando entrega: ${error.message}`);
+        
+        // Restaurar el botón
+        this.innerHTML = originalText;
+        this.disabled = false;
+        alert(`Error: ${error.message}`);
+      }
+    });
+
+    // Event listener para el botón de ubicación manual
+    btnUbicacionManual.addEventListener('click', function() {
+      mostrarModalTipoUbicacion();
+    });
+
+    // Solicitar código
+    async function solicitarCodigo() {
+      const telefono = document.getElementById('telefono').value;
+      const errorElement = document.getElementById('login-error');
+      errorElement.style.display = 'none';
+      
+      if (!telefono || telefono.length < 8) {
+        errorElement.textContent = 'Ingrese un número válido';
+        errorElement.style.display = 'block';
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${config.backendUrl}/mensajeros/solicitar-codigo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefono })
+        });
+        
+        const data = await handleFetchResponse(response);
+        alert(`Código enviado (SIMULADO): ${data.codigo || 'Revisa la consola del servidor'}`);
+        addLog(`Código solicitado para ${telefono}`);
+      } catch (error) {
+        errorElement.textContent = `Error: ${error.message}`;
+        errorElement.style.display = 'block';
+        addLog(`Error solicitando código: ${error.message}`);
+      }
+    }
+
+    // Iniciar sesión
+    async function iniciarSesion() {
+      const telefono = document.getElementById('telefono').value;
+      const codigo = document.getElementById('codigo').value;
+      const errorElement = document.getElementById('login-error');
+      errorElement.style.display = 'none';
+      
+      if (!telefono || !codigo) {
+        errorElement.textContent = 'Complete todos los campos';
+        errorElement.style.display = 'block';
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${config.backendUrl}/mensajeros/verificar-codigo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefono, codigo })
+        });
+        
+        const data = await handleFetchResponse(response);
+        telefonoMensajero = telefono;
+        
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('panel-mensajero').style.display = 'block';
+        
+        initMap();
+        mostrarPedidosDisponibles();
+        initSocket();
+        addLog(`Sesión iniciada: ${telefono}`);
+      } catch (error) {
+        errorElement.textContent = `Error: ${error.message}`;
+        errorElement.style.display = 'block';
+        addLog(`Error iniciando sesión: ${error.message}`);
+      }
+    }
+
+    // Event listeners existentes
+    document.getElementById('btn-solicitar-codigo').addEventListener('click', solicitarCodigo);
+    document.getElementById('btn-login').addEventListener('click', iniciarSesion);
+
+    // Inicializar
+    window.onload = function() {
+      initSocket();
+      addLog('Sistema iniciado');
+    };
+  </script>
+</body>
+</html>
